@@ -6,13 +6,21 @@
  * fetches are stampede-safe: concurrent callers share a single in-flight
  * promise, so the token endpoint is hit once (JavaScript's single-threaded
  * model makes the in-flight promise the mutex).
+ *
+ * The fetch itself goes through the transport's execute path, so it gets the
+ * same retry policy (the token POST is idempotent, spec §2.6) and the same
+ * typed-error mapping (network failures raise ConnectionError) as every other
+ * idempotent operation.
  */
 
 import { createHmac } from 'node:crypto';
 
 import { parseError } from '../errors/index.js';
 import { decodeJwtExp } from '../helpers/jwt.js';
-import type { FetchLike } from './config.js';
+import type { RequestPlan, TransportResult } from './transport.js';
+
+/** Executes a request plan; provided by the transport. */
+export type ExecuteFn = (plan: RequestPlan) => Promise<TransportResult>;
 
 /** Skew subtracted from token expiry so a token is refreshed before it lapses. */
 const EXPIRY_SKEW_SECONDS = 60;
@@ -29,11 +37,9 @@ export class TokenManager {
   private inflight: Promise<string> | null = null;
 
   constructor(
-    private readonly baseUrl: string,
     private readonly partnerId: string,
     private readonly apiKey: string,
-    private readonly fetchImpl: FetchLike,
-    private readonly telemetryHeaders: () => Record<string, string>,
+    private readonly execute: ExecuteFn,
     private readonly now: () => number = () => Date.now(),
   ) {}
 
@@ -58,30 +64,25 @@ export class TokenManager {
 
   private async fetchToken(): Promise<string> {
     // The token endpoint documents lowercase header names; send them verbatim.
-    const headers: Record<string, string> = {
-      ...this.telemetryHeaders(),
-      'smileid-partner-id': this.partnerId,
-      'smileid-api-key': this.apiKey,
-    };
-    const resp = await this.fetchImpl(`${this.baseUrl}/v3/token`, {
+    // No body is sent. The plan is unauthenticated (no SmileID-Token) and
+    // idempotent, so the transport retries transient failures (spec §2.6).
+    const result = await this.execute({
       method: 'POST',
-      headers,
+      path: '/v3/token',
+      authenticated: false,
+      needsPartnerIdHeader: false,
+      idempotent: true,
+      headers: {
+        'smileid-partner-id': this.partnerId,
+        'smileid-api-key': this.apiKey,
+      },
     });
-    const rawBody = await resp.text();
-    if (resp.status !== 200) {
-      throw parseError({
-        statusCode: resp.status,
-        rawBody,
-        requestId: resp.headers.get('x-request-id'),
-      });
-    }
-    const parsed = JSON.parse(rawBody) as { token?: string };
-    const jwt = parsed.token;
+    const jwt = (result.json as { token?: string } | null)?.token;
     if (!jwt) {
       throw parseError({
-        statusCode: resp.status,
-        rawBody,
-        requestId: resp.headers.get('x-request-id'),
+        statusCode: result.statusCode,
+        rawBody: result.rawBody,
+        requestId: result.requestId,
       });
     }
     const exp = decodeJwtExp(jwt);

@@ -93,12 +93,8 @@ export class Transport {
     private readonly sleep: (ms: number) => Promise<void> = (ms) =>
       new Promise((resolve) => setTimeout(resolve, ms)),
   ) {
-    this.tokenManager = new TokenManager(
-      config.baseUrl,
-      config.partnerId,
-      config.apiKey,
-      config.fetch,
-      () => this.telemetryHeaders(),
+    this.tokenManager = new TokenManager(config.partnerId, config.apiKey, (plan) =>
+      this.execute(plan),
     );
   }
 
