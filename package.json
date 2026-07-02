@@ -1,0 +1,42 @@
+{
+  "name": "@smileid/core",
+  "version": "0.1.0",
+  "description": "Official Smile ID server-side SDK for JavaScript/TypeScript — V3 APIs.",
+  "private": false,
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint .",
+    "test": "npm run build && node --test dist"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/smileidentity/smileid-sdk-js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/smileidentity/smileid-sdk-js/issues"
+  },
+  "homepage": "https://github.com/smileidentity/smileid-sdk-js#readme",
+  "keywords": [
+    "smile",
+    "identity",
+    "kyc",
+    "sdk"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist/**/*"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "eslint": "^9.39.2",
+    "globals": "^16.0.0",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.0"
+  }
+}
