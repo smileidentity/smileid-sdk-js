@@ -16,6 +16,8 @@
 
 import { randomBytes } from 'node:crypto';
 
+import { ValidationError } from '../errors/index.js';
+
 /** A scalar text part (e.g. country, id_type). */
 export interface ScalarPart {
   kind: 'scalar';
@@ -48,6 +50,26 @@ export interface SerializedMultipart {
 
 const CRLF = '\r\n';
 
+/** RFC 7230 media-type shape, e.g. image/jpeg or application/json. */
+const SAFE_CONTENT_TYPE = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+
+/**
+ * Strip characters from a caller-supplied filename that would break part
+ * framing (RFC 7578): CR, LF, and double quotes.
+ */
+export function sanitizeFilename(filename: string): string {
+  return filename.replace(/[\r\n"]/g, '_');
+}
+
+/** Reject content types that cannot be interpolated into a part header safely. */
+function assertSafeContentType(contentType: string): void {
+  if (!SAFE_CONTENT_TYPE.test(contentType)) {
+    throw new ValidationError({
+      message: `Invalid content type for a multipart part: ${JSON.stringify(contentType)}.`,
+    });
+  }
+}
+
 /** Serialize parts into a multipart/form-data body (spec §5.3). */
 export function buildMultipart(parts: MultipartPart[]): SerializedMultipart {
   const boundary = `----smileidFormBoundary${randomBytes(16).toString('hex')}`;
@@ -56,7 +78,8 @@ export function buildMultipart(parts: MultipartPart[]): SerializedMultipart {
   for (const part of parts) {
     let header = `--${boundary}${CRLF}`;
     if (part.kind === 'binary') {
-      header += `Content-Disposition: form-data; name="${part.name}"; filename="${part.filename}"${CRLF}`;
+      assertSafeContentType(part.contentType);
+      header += `Content-Disposition: form-data; name="${part.name}"; filename="${sanitizeFilename(part.filename)}"${CRLF}`;
       header += `Content-Type: ${part.contentType}${CRLF}${CRLF}`;
       segments.push(Buffer.from(header, 'utf8'), part.bytes, Buffer.from(CRLF, 'utf8'));
     } else if (part.kind === 'json') {
