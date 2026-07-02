@@ -19,6 +19,9 @@ const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 /** Base backoff in ms (SDK choice — not in the spec). */
 const BACKOFF_BASE_MS = 50;
 
+/** Cap on an honoured Retry-After delay (cross-SDK standard). */
+const RETRY_AFTER_CAP_SECONDS = 60;
+
 /** A fully-described request for {@link Transport.execute}. */
 export interface RequestPlan {
   method: 'GET' | 'POST';
@@ -65,18 +68,24 @@ export function shouldRetry(
   return RETRYABLE_STATUSES.has(statusCode);
 }
 
-/** Backoff delay in ms: honour Retry-After when present, else exponential + jitter. */
+/**
+ * Backoff delay in ms: honour Retry-After when present (capped at 60s),
+ * else exponential + jitter.
+ */
 export function computeBackoff(attempt: number, retryAfterSeconds: number | null): number {
   if (retryAfterSeconds !== null && retryAfterSeconds >= 0) {
-    return retryAfterSeconds * 1000;
+    return Math.min(retryAfterSeconds, RETRY_AFTER_CAP_SECONDS) * 1000;
   }
   const exponential = BACKOFF_BASE_MS * 2 ** attempt;
   const jitter = Math.floor(Math.random() * BACKOFF_BASE_MS);
   return exponential + jitter;
 }
 
-/** Parse a Retry-After header (delta-seconds or HTTP date) into ms-from-now seconds. */
-function parseRetryAfter(value: string | null): number | null {
+/**
+ * Parse a Retry-After header into seconds from now. Both RFC 7231 forms are
+ * honoured: delta-seconds ("2") and HTTP-date ("Wed, 01 Jul 2026 12:00:05 GMT").
+ */
+export function parseRetryAfter(value: string | null): number | null {
   if (!value) return null;
   const seconds = Number(value);
   if (Number.isFinite(seconds)) return seconds;
