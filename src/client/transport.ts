@@ -119,6 +119,9 @@ export class Transport {
     let authRefreshed = false;
 
     for (;;) {
+      if (plan.signal?.aborted) {
+        throw new ConnectionError({ message: 'Request aborted.' });
+      }
       const headers: Record<string, string> = { ...this.telemetryHeaders() };
       for (const [k, v] of Object.entries(plan.headers ?? {})) {
         if (v !== undefined) headers[k] = v;
@@ -159,6 +162,10 @@ export class Transport {
           signal: controller.signal,
         });
       } catch (err) {
+        // A caller-initiated abort is not a transient fault: never retry it.
+        if (plan.signal?.aborted) {
+          throw new ConnectionError({ message: 'Request aborted.' });
+        }
         if (shouldRetry(plan.idempotent, attempt, this.config.maxRetries, null)) {
           await this.sleep(computeBackoff(attempt, null));
           attempt += 1;

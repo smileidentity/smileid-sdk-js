@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { waitUntilComplete } from './poll.js';
-import { TimeoutError } from '../errors/index.js';
+import { ConnectionError, TimeoutError } from '../errors/index.js';
 import { JobStatus } from '../generated/models/index.js';
 import { SmileID } from '../client/client.js';
 import { jsonResponse, routerFetch } from '../testing/mock.js';
@@ -52,4 +52,22 @@ test('verifications.retrieve returns a not_found JobStatus on HTTP 404', async (
   const js = await client.verifications.retrieve('job_01h8x9y2z3a4b5c6d7e8f9g0h1');
   assert.equal(js.isNotFound, true);
   assert.equal(js.message, 'Verification not found');
+});
+
+// The wait options must reach each poll request: an aborted signal takes
+// effect on the in-flight retrieve, not just between polls.
+test('waitUntilComplete propagates the abort signal to the status request', async () => {
+  const { fetch } = routerFetch(() =>
+    jsonResponse(202, { status: 'processing', job_id: 'job_1', message: 'still going' }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(
+    () =>
+      client.verifications.waitUntilComplete('job_01h8x9y2z3a4b5c6d7e8f9g0h1', {
+        signal: controller.signal,
+      }),
+    ConnectionError,
+  );
 });

@@ -169,7 +169,14 @@ export class SmileID {
     this.verifications = {
       retrieve: (jobId, options) => ops.verificationStatus(t, jobId, options),
       waitUntilComplete: (jobId, options) =>
-        waitUntilComplete(() => ops.verificationStatus(t, jobId), options),
+        waitUntilComplete(
+          () =>
+            ops.verificationStatus(t, jobId, {
+              signal: options?.signal,
+              timeout: options?.requestTimeout,
+            }),
+          options,
+        ),
       replay: (jobId, params, options) => ops.replayCallback(t, jobId, params, options),
     };
 

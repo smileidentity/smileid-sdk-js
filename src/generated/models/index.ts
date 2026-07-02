@@ -234,6 +234,9 @@ export interface WaitOptions {
   timeout?: number;
   /** When true (default), a not_found status keeps polling instead of returning. */
   treatNotFoundAsPending?: boolean;
+  /** Timeout in milliseconds for each individual poll request. */
+  requestTimeout?: number;
+  /** Aborts both the polling loop and any in-flight status request. */
   signal?: AbortSignal;
 }
 
