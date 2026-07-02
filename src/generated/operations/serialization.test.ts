@@ -200,3 +200,187 @@ test('bank_codes: camelCases the response and attaches no token', async () => {
   assert.equal(req.headers['SmileID-Token'], undefined);
   assert.match(req.url, /country=NG/);
 });
+
+// spec §6.3 — enhanced document verification requires id_type and Partner-ID header.
+test('enhanced_document_verification: Partner-ID header, id_type part, repeated liveness', async () => {
+  const { fetch, requests } = routerFetch(() => accepted202('accepted'));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  await client.documents.verifyEnhanced({
+    country: 'NG',
+    idType: 'PASSPORT',
+    selfieImage: FAKE_IMAGE,
+    livenessImages: FAKE_LIVENESS,
+    document: FAKE_IMAGE,
+    userDetails,
+    consent,
+  });
+
+  const req = opRequest(requests);
+  assert.match(req.url, /\/v3\/enhanced_document_verification$/);
+  assert.equal(req.headers['SmileID-Partner-ID'], '1234');
+  assert.match(req.bodyText, /name="id_type"\r\n\r\nPASSPORT\r\n/);
+  assert.equal(countParts(req.bodyText, 'liveness_images'), 6);
+});
+
+// spec §6.4 — biometric KYC: Partner-ID header, id fields, repeated liveness.
+test('biometric_kyc: Partner-ID header and id scalar parts', async () => {
+  const { fetch, requests } = routerFetch(() => accepted202('accepted'));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  await client.biometricKyc.verify({
+    country: 'NG',
+    idType: 'NIN',
+    idNumber: '12345678901',
+    selfieImage: FAKE_IMAGE,
+    livenessImages: FAKE_LIVENESS,
+    userDetails,
+    consent,
+    userId: 'user_1',
+  });
+
+  const req = opRequest(requests);
+  assert.match(req.url, /\/v3\/biometric_kyc$/);
+  assert.equal(req.headers['SmileID-Partner-ID'], '1234');
+  assert.equal(req.headers['User-ID'], 'user_1');
+  assert.match(req.bodyText, /name="id_number"\r\n\r\n12345678901\r\n/);
+  assert.equal(countParts(req.bodyText, 'liveness_images'), 6);
+});
+
+// spec §6.5 — registration: no Partner-ID header, boolean scalar as "true".
+test('registration: no Partner-ID header, allow_new_enroll as text "true"', async () => {
+  const { fetch, requests } = routerFetch(() => accepted202('Accepted'));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  await client.biometric.enroll({
+    selfieImage: FAKE_IMAGE,
+    livenessImages: FAKE_LIVENESS,
+    allowNewEnroll: true,
+    userDetails,
+    consent,
+    userId: 'user_1',
+  });
+
+  const req = opRequest(requests);
+  assert.match(req.url, /\/v3\/registration$/);
+  assert.equal(req.headers['SmileID-Partner-ID'], undefined);
+  assert.equal(req.headers['User-ID'], 'user_1');
+  assert.match(req.bodyText, /name="allow_new_enroll"\r\n\r\ntrue\r\n/);
+});
+
+// spec §6.7 — compare: comparison image + type, optional body user_id.
+test('compare: comparison_image binary part, enum scalar, optional body user_id', async () => {
+  const { fetch, requests } = routerFetch(() => accepted202('Accepted'));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  await client.biometric.compare({
+    selfieImage: FAKE_IMAGE,
+    comparisonImage: FAKE_IMAGE,
+    comparisonImageType: 'ID_PHOTO',
+    userDetails,
+    consent,
+    userId: 'user_1',
+  });
+
+  const req = opRequest(requests);
+  assert.match(req.url, /\/v3\/compare$/);
+  assert.equal(req.headers['User-ID'], undefined, 'user_id goes in the body for compare');
+  assert.match(req.bodyText, /name="comparison_image_type"\r\n\r\nID_PHOTO\r\n/);
+  assert.match(req.bodyText, /name="user_id"\r\n\r\nuser_1\r\n/);
+  assert.match(
+    req.bodyText,
+    /name="comparison_image"; filename="comparison.jpg"\r\nContent-Type: image\/jpeg/,
+  );
+});
+
+// spec §6.8 — retrieve: GET with token, job id in the path.
+test('status: GET /v3/status/{jobId} with a token and no body', async () => {
+  const { fetch, requests } = routerFetch(() =>
+    jsonResponse(200, { status: 'complete', job_id: 'job_1', user_id: 'user_1', message: 'done' }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const js = await client.verifications.retrieve('job_01h8x9y2z3a4b5c6d7e8f9g0h1');
+  assert.equal(js.isComplete, true);
+
+  const req = opRequest(requests);
+  assert.equal(req.method, 'GET');
+  assert.match(req.url, /\/v3\/status\/job_01h8x9y2z3a4b5c6d7e8f9g0h1$/);
+  assert.ok(req.headers['SmileID-Token']);
+  assert.equal(req.bodyText, '');
+});
+
+// spec §6.13 — supported_id_types: unauthenticated GET with country query.
+test('supported_id_types: no token, country query, camelCased response', async () => {
+  const { fetch, requests, tokenCalls } = routerFetch(() =>
+    jsonResponse(200, {
+      id_types: [
+        {
+          country: 'NG',
+          label: 'Bank Verification Number',
+          regex: '^\\d{11}$',
+          required_fields: ['first_name', 'last_name', 'dob'],
+          type: 'BVN',
+        },
+      ],
+    }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const res = await client.services.supportedIdTypes({ country: 'NG' });
+  assert.equal(res.idTypes[0].type, 'BVN');
+  assert.deepEqual(res.idTypes[0].requiredFields, ['first_name', 'last_name', 'dob']);
+  assert.equal(tokenCalls(), 0);
+  const req = opRequest(requests);
+  assert.match(req.url, /\/v3\/services\/supported_id_types\?country=NG$/);
+  assert.equal(req.headers['SmileID-Token'], undefined);
+});
+
+// spec §6.14 — supported_documents: unauthenticated GET with snake_case query names.
+test('supported_documents: no token, country_code and locale query params', async () => {
+  const { fetch, requests, tokenCalls } = routerFetch(() =>
+    jsonResponse(200, {
+      valid_documents: [
+        {
+          country: { code: 'NG', name: 'Nigeria', continent: 'AFRICA' },
+          id_types: [
+            { code: 'DRIVERS_LICENSE', name: "Driver's License", example: ['AAA00000AA00'], has_back: true },
+          ],
+        },
+      ],
+    }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const res = await client.services.supportedDocuments({ countryCode: 'NG', locale: 'en-GB' });
+  assert.equal(res.validDocuments[0].country.code, 'NG');
+  assert.equal(res.validDocuments[0].idTypes[0].hasBack, true);
+  assert.equal(tokenCalls(), 0);
+  const req = opRequest(requests);
+  assert.match(req.url, /country_code=NG/);
+  assert.match(req.url, /locale=en-GB/);
+  assert.equal(req.headers['SmileID-Token'], undefined);
+});
+
+// spec §2.5 — HMAC headers appear only when partnerSecret is configured.
+test('HMAC signing is off by default and on with partnerSecret', async () => {
+  const off = routerFetch(() => accepted202('Accepted'));
+  const clientOff = new SmileID({ partnerId: '1234', apiKey: 'k', fetch: off.fetch });
+  await clientOff.enhancedKyc.verify({
+    country: 'NG', idType: 'NIN', idNumber: '1', userDetails, consent,
+  });
+  const reqOff = opRequest(off.requests);
+  assert.equal(reqOff.headers['SmileID-Timestamp'], undefined);
+  assert.equal(reqOff.headers['SmileID-Request-Signature'], undefined);
+
+  const on = routerFetch(() => accepted202('Accepted'));
+  const clientOn = new SmileID({
+    partnerId: '1234', apiKey: 'k', partnerSecret: 's3cret', fetch: on.fetch,
+  });
+  await clientOn.enhancedKyc.verify({
+    country: 'NG', idType: 'NIN', idNumber: '1', userDetails, consent,
+  });
+  const reqOn = opRequest(on.requests);
+  assert.ok(reqOn.headers['SmileID-Timestamp']);
+  assert.match(reqOn.headers['SmileID-Request-Signature'], /^[0-9a-f]{64}$/);
+});
