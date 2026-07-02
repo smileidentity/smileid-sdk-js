@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc",
     "lint": "eslint .",
-    "test": "npm run build && node --test dist"
+    "test": "npm run build && node --test $(find dist -name '*.test.js')"
   },
   "license": "MIT",
   "repository": {
