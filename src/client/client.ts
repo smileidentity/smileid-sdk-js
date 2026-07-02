@@ -50,11 +50,6 @@ export class SmileID {
     verify(params: EnhancedKycParams, options?: RequestOptions): Promise<AcceptedResponse>;
   };
 
-  /** Alias namespace matching the spec §8 quick-start example (`kyc.enhanced`). */
-  readonly kyc: {
-    enhanced(params: EnhancedKycParams, options?: RequestOptions): Promise<AcceptedResponse>;
-  };
-
   /** Document verification (spec §6.2, §6.3). */
   readonly documents: {
     verify(
@@ -130,16 +125,12 @@ export class SmileID {
     this.transport = new Transport(resolveConfig(config));
     const t = this.transport;
 
-    const verifyEnhancedKyc = (
-      params: EnhancedKycParams,
-      options?: RequestOptions,
-    ): Promise<AcceptedResponse> => {
-      validateUserDetails(params.userDetails);
-      return ops.enhancedKyc(t, params, options);
+    this.enhancedKyc = {
+      verify: (params, options) => {
+        validateUserDetails(params.userDetails);
+        return ops.enhancedKyc(t, params, options);
+      },
     };
-
-    this.enhancedKyc = { verify: verifyEnhancedKyc };
-    this.kyc = { enhanced: verifyEnhancedKyc };
 
     this.documents = {
       verify: (params, options) => {

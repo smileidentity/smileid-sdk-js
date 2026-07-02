@@ -26,11 +26,17 @@ test(
       environment: 'sandbox',
     });
 
+    // The sandbox only accepts recognized test identities, matched on
+    // given_names + last_name + email.
     const accepted = await client.enhancedKyc.verify({
       country: 'NG',
       idType: 'NIN',
-      idNumber: '00000000000',
-      userDetails: { givenNames: 'John', lastName: 'Doe', email: 'john@example.com' },
+      idNumber: '12345678901',
+      userDetails: {
+        givenNames: 'Amina Fatou',
+        lastName: 'Clearwater',
+        email: 'amina.clearwater@example.com',
+      },
       consent: Consent.granted({
         grantedAt: new Date(),
         noticeLanguage: 'EN',
