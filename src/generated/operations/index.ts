@@ -76,28 +76,60 @@ function optionalJson(
   return [{ kind: 'json', name, json: JSON.stringify(value) }];
 }
 
-async function binaryPart(
+type AnyBinaryInput = NonNullable<Parameters<typeof resolveBinary>[0]>;
+
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+
+/**
+ * selfie_image / liveness_images / comparison_image parts are always
+ * image/jpeg on the wire (spec §5.3, cross-SDK policy), regardless of any
+ * type carried by the input.
+ */
+async function jpegPart(
   name: string,
-  input: NonNullable<Parameters<typeof resolveBinary>[0]>,
+  input: AnyBinaryInput,
   defaultName: string,
-  defaultType = 'image/jpeg',
 ): Promise<MultipartPart> {
-  const resolved = await resolveBinary(input, defaultName, defaultType);
+  const resolved = await resolveBinary(input, defaultName, 'image/jpeg');
   return {
     kind: 'binary',
     name,
     filename: resolved.filename,
-    contentType: resolved.contentType,
+    contentType: 'image/jpeg',
     bytes: resolved.bytes,
   };
 }
 
-async function livenessParts(
-  images: NonNullable<Parameters<typeof resolveBinary>[0]>[],
-): Promise<MultipartPart[]> {
+/**
+ * document / document_back may be image/jpeg or image/png (spec §5.3). An
+ * explicit type on the input wins; otherwise PNG is detected from the file's
+ * magic bytes and everything else is treated as JPEG.
+ */
+async function documentPart(
+  name: string,
+  input: AnyBinaryInput,
+  defaultName: string,
+): Promise<MultipartPart> {
+  const resolved = await resolveBinary(input, defaultName, '');
+  const contentType =
+    resolved.contentType !== ''
+      ? resolved.contentType
+      : resolved.bytes.subarray(0, 4).equals(PNG_MAGIC)
+        ? 'image/png'
+        : 'image/jpeg';
+  return {
+    kind: 'binary',
+    name,
+    filename: resolved.filename,
+    contentType,
+    bytes: resolved.bytes,
+  };
+}
+
+async function livenessParts(images: AnyBinaryInput[]): Promise<MultipartPart[]> {
   // Repeated parts, all named liveness_images — never CSV/indexed (spec §5.3).
   return Promise.all(
-    images.map((img, i) => binaryPart('liveness_images', img, `liveness${i + 1}.jpg`)),
+    images.map((img, i) => jpegPart('liveness_images', img, `liveness${i + 1}.jpg`)),
   );
 }
 
@@ -175,11 +207,11 @@ export async function documentVerification(
     ...scalar('country', params.country),
     ...scalar('id_type', params.idType),
     ...scalar('callback_url', effectiveCallback(params.callbackUrl, opts, transport)),
-    await binaryPart('selfie_image', params.selfieImage, 'selfie.jpg'),
+    await jpegPart('selfie_image', params.selfieImage, 'selfie.jpg'),
     ...(await livenessParts(params.livenessImages)),
-    await binaryPart('document', params.document, 'document.jpg'),
+    await documentPart('document', params.document, 'document.jpg'),
     ...(params.documentBack
-      ? [await binaryPart('document_back', params.documentBack, 'document_back.jpg')]
+      ? [await documentPart('document_back', params.documentBack, 'document_back.jpg')]
       : []),
     ...jsonPart('user_details', userDetailsJson(params.userDetails)),
     ...jsonPart('consent', consentJson(params.consent)),
@@ -208,11 +240,11 @@ export async function enhancedDocumentVerification(
     ...scalar('country', params.country),
     ...scalar('id_type', params.idType),
     ...scalar('callback_url', effectiveCallback(params.callbackUrl, opts, transport)),
-    await binaryPart('selfie_image', params.selfieImage, 'selfie.jpg'),
+    await jpegPart('selfie_image', params.selfieImage, 'selfie.jpg'),
     ...(await livenessParts(params.livenessImages)),
-    await binaryPart('document', params.document, 'document.jpg'),
+    await documentPart('document', params.document, 'document.jpg'),
     ...(params.documentBack
-      ? [await binaryPart('document_back', params.documentBack, 'document_back.jpg')]
+      ? [await documentPart('document_back', params.documentBack, 'document_back.jpg')]
       : []),
     ...jsonPart('user_details', userDetailsJson(params.userDetails)),
     ...jsonPart('consent', consentJson(params.consent)),
@@ -243,7 +275,7 @@ export async function biometricKyc(
     ...scalar('id_number', params.idNumber),
     ...scalar('sandbox_result', params.sandboxResult),
     ...scalar('callback_url', effectiveCallback(params.callbackUrl, opts, transport)),
-    await binaryPart('selfie_image', params.selfieImage, 'selfie.jpg'),
+    await jpegPart('selfie_image', params.selfieImage, 'selfie.jpg'),
     ...(await livenessParts(params.livenessImages)),
     ...jsonPart('user_details', userDetailsJson(params.userDetails)),
     ...jsonPart('consent', consentJson(params.consent)),
@@ -272,7 +304,7 @@ export async function registration(
     ...scalar('allow_new_enroll', params.allowNewEnroll),
     ...scalar('sandbox_result', params.sandboxResult),
     ...scalar('callback_url', effectiveCallback(params.callbackUrl, opts, transport)),
-    await binaryPart('selfie_image', params.selfieImage, 'selfie.jpg'),
+    await jpegPart('selfie_image', params.selfieImage, 'selfie.jpg'),
     ...(await livenessParts(params.livenessImages)),
     ...jsonPart('user_details', userDetailsJson(params.userDetails)),
     ...jsonPart('consent', consentJson(params.consent)),
@@ -304,7 +336,7 @@ export async function authentication(
     ...scalar('sandbox_result', params.sandboxResult),
     ...scalar('callback_url', effectiveCallback(params.callbackUrl, opts, transport)),
     ...(params.selfieImage
-      ? [await binaryPart('selfie_image', params.selfieImage, 'selfie.jpg')]
+      ? [await jpegPart('selfie_image', params.selfieImage, 'selfie.jpg')]
       : []),
     ...(params.livenessImages ? await livenessParts(params.livenessImages) : []),
     ...jsonPart('user_details', userDetailsJson(params.userDetails)),
@@ -336,8 +368,8 @@ export async function compare(
     ...scalar('user_id', params.userId),
     ...scalar('sandbox_result', params.sandboxResult),
     ...scalar('callback_url', effectiveCallback(params.callbackUrl, opts, transport)),
-    await binaryPart('selfie_image', params.selfieImage, 'selfie.jpg'),
-    await binaryPart('comparison_image', params.comparisonImage, 'comparison.jpg'),
+    await jpegPart('selfie_image', params.selfieImage, 'selfie.jpg'),
+    await jpegPart('comparison_image', params.comparisonImage, 'comparison.jpg'),
     ...(params.livenessImages ? await livenessParts(params.livenessImages) : []),
     ...jsonPart('user_details', userDetailsJson(params.userDetails)),
     ...jsonPart('consent', consentJson(params.consent)),

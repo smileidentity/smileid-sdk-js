@@ -390,3 +390,47 @@ test('HMAC signing is off by default and on with partnerSecret', async () => {
   assert.ok(reqOn.headers['SmileID-Timestamp']);
   assert.match(reqOn.headers['SmileID-Request-Signature'], /^[0-9a-f]{64}$/);
 });
+
+// Cross-SDK content-type policy (spec §5.3): PNG detection applies only to
+// document and document_back; selfie/liveness/comparison are always image/jpeg.
+test('document PNG bytes are detected and sent as image/png', async () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const { fetch, requests } = routerFetch(() => accepted202('accepted'));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  await client.documents.verify({
+    country: 'NG',
+    selfieImage: FAKE_IMAGE,
+    livenessImages: FAKE_LIVENESS,
+    document: png,
+    userDetails,
+    consent,
+  });
+
+  const req = opRequest(requests);
+  assert.match(
+    req.bodyText,
+    /name="document"; filename="document.jpg"\r\nContent-Type: image\/png/,
+  );
+});
+
+test('selfie_image is always image/jpeg even when the input claims otherwise', async () => {
+  const { fetch, requests } = routerFetch(() => accepted202('accepted'));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  await client.documents.verify({
+    country: 'NG',
+    selfieImage: { data: FAKE_IMAGE, contentType: 'image/png' },
+    livenessImages: FAKE_LIVENESS.map((img) => ({ data: img, contentType: 'image/png' })),
+    document: FAKE_IMAGE,
+    userDetails,
+    consent,
+  });
+
+  const req = opRequest(requests);
+  assert.match(req.bodyText, /name="selfie_image"[^\r]*\r\nContent-Type: image\/jpeg/);
+  assert.ok(
+    !/name="(selfie_image|liveness_images)"[^\r]*\r\nContent-Type: image\/png/.test(req.bodyText),
+    'no selfie or liveness part is PNG',
+  );
+});
