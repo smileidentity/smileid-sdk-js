@@ -62,6 +62,12 @@ test('enhanced_kyc: scalar + JSON parts, User-ID header, no Partner-ID header', 
   assert.equal(req.headers['SmileID-Partner-ID'], undefined, 'no Partner-ID header for enhanced_kyc');
   assert.ok(req.headers['SmileID-Token'], 'token attached');
   assert.equal(req.headers['SmileID-Source-SDK'], 'node');
+  assert.equal(req.headers['SmileID-Source-SDK-Version'], '0.1.0');
+  // Cross-SDK format: smileid-sdk-node/<version> (node/<runtime version, no leading v>).
+  assert.match(
+    req.headers['User-Agent'],
+    /^smileid-sdk-node\/0\.1\.0 \(node\/\d+\.\d+\.\d+[^)]*\)$/,
+  );
   assert.match(req.headers['Content-Type'], /^multipart\/form-data; boundary=/);
 
   const body = req.bodyText;

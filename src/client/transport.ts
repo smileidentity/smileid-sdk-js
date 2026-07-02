@@ -108,7 +108,7 @@ export class Transport {
     return {
       'SmileID-Source-SDK': 'node',
       'SmileID-Source-SDK-Version': VERSION,
-      'User-Agent': `smileid-sdk-js/${VERSION} (node/${process.version})`,
+      'User-Agent': `smileid-sdk-node/${VERSION} (node/${process.version.replace(/^v/, '')})`,
     };
   }
 
