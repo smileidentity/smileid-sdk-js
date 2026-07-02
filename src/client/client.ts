@@ -9,6 +9,7 @@
 import { resolveConfig, type SmileIDConfig } from './config.js';
 import { Transport } from './transport.js';
 import * as ops from '../generated/operations/index.js';
+import { ValidationError } from '../errors/index.js';
 import { waitUntilComplete } from '../helpers/poll.js';
 import {
   validateAuthentication,
@@ -139,6 +140,13 @@ export class SmileID {
       },
       verifyEnhanced: (params, options) => {
         validateUserDetails(params.userDetails);
+        // idType is required for enhanced document verification (spec §6.3);
+        // enforced at runtime for plain-JavaScript callers too.
+        if (!params.idType) {
+          throw new ValidationError({
+            message: 'idType is required for enhanced document verification.',
+          });
+        }
         return ops.enhancedDocumentVerification(t, params, options);
       },
     };

@@ -7,6 +7,7 @@ import {
   validateReportFraud,
   validateUserDetails,
 } from './validation.js';
+import { SmileID } from '../client/client.js';
 import { FAKE_IMAGE, FAKE_LIVENESS } from '../testing/mock.js';
 
 // Matrix item 6: client-side validation.
@@ -76,5 +77,34 @@ test('validateAuthentication requires images unless useEnrolledImage', () => {
   assert.doesNotThrow(() => validateAuthentication({ ...base, useEnrolledImage: true }));
   assert.doesNotThrow(() =>
     validateAuthentication({ ...base, selfieImage: FAKE_IMAGE, livenessImages: FAKE_LIVENESS }),
+  );
+});
+
+// Cross-SDK standard: verifyEnhanced enforces idType client-side (spec §6.3),
+// including for plain-JavaScript callers who bypass the compile-time check.
+test('documents.verifyEnhanced rejects a missing idType before sending', () => {
+  const fetch = async (): Promise<Response> => {
+    throw new Error('no request should be sent');
+  };
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  const params = {
+    country: 'NG',
+    selfieImage: FAKE_IMAGE,
+    livenessImages: FAKE_LIVENESS,
+    document: FAKE_IMAGE,
+    userDetails: { givenNames: 'John', lastName: 'Doe', email: 'john@example.com' },
+    consent: {
+      granted: true as const,
+      grantedAt: '2026-03-06T12:00:00.000Z',
+      noticeLanguage: 'EN',
+      noticePrivacyPolicyUrl: 'https://example.com/privacy',
+    },
+  };
+  assert.throws(
+    () =>
+      client.documents.verifyEnhanced(
+        params as unknown as Parameters<typeof client.documents.verifyEnhanced>[0],
+      ),
+    ValidationError,
   );
 });
