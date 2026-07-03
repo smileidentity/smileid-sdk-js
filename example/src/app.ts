@@ -15,7 +15,6 @@ export interface RunOptions {
 interface AppConfig {
   partnerId: string;
   apiKey: string;
-  partnerSecret?: string;
   baseUrl?: string;
   callbackUrl?: string;
   timeout: number;
@@ -42,7 +41,6 @@ export async function run(options: RunOptions): Promise<void> {
   const smile = new SmileID({
     partnerId: config.partnerId,
     apiKey: config.apiKey,
-    partnerSecret: config.partnerSecret,
     baseUrl: config.baseUrl,
     defaultCallbackUrl: config.callbackUrl,
     timeout: config.timeout,
@@ -76,7 +74,6 @@ function parseGlobalFlags(argv: string[], env: Env, fetchImpl?: FetchLike): {
   const config: AppConfig = {
     partnerId: env.SMILE_PARTNER_ID ?? '',
     apiKey: env.SMILE_API_KEY ?? '',
-    partnerSecret: env.SMILE_PARTNER_SECRET,
     baseUrl: env.SMILE_BASE_URL,
     callbackUrl: env.SMILE_CALLBACK_URL,
     timeout: Number(env.SMILE_TIMEOUT_MS ?? '30000'),
@@ -96,9 +93,6 @@ function parseGlobalFlags(argv: string[], env: Env, fetchImpl?: FetchLike): {
         break;
       case '--api-key':
         config.apiKey = value;
-        break;
-      case '--partner-secret':
-        config.partnerSecret = value;
         break;
       case '--base-url':
         config.baseUrl = value;
@@ -231,6 +225,7 @@ export function usage(): string {
   smileid-example-js [global flags] status --job-id job_...
   smileid-example-js [global flags] replay --job-id job_... --callback-url https://example.com/webhook
 
-Global flags can also be set with SMILE_PARTNER_ID, SMILE_API_KEY, SMILE_PARTNER_SECRET, SMILE_BASE_URL, SMILE_CALLBACK_URL and SMILE_TIMEOUT_MS.
+Global flags can also be set with SMILE_PARTNER_ID, SMILE_API_KEY,
+SMILE_BASE_URL, SMILE_CALLBACK_URL and SMILE_TIMEOUT_MS.
 `;
 }
