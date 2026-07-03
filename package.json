@@ -1,6 +1,6 @@
 {
-  "name": "@smileid/core",
-  "version": "0.1.0",
+  "name": "@smileid/smileid",
+  "version": "12.0.0",
   "description": "Official Smile ID server-side SDK for JavaScript/TypeScript — V3 APIs.",
   "private": false,
   "type": "commonjs",

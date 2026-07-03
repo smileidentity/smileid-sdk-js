@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Renamed the package from `@smileid/core` to `@smileid/smileid`.
+- Set the version to 12.0.0, aligning the server SDKs with the V12
+  mobile SDKs.
+
 ### Added
 
 - Full V3 API surface: enhanced KYC, document verification (standard and
