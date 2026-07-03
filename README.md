@@ -35,12 +35,21 @@ const smile = new SmileID({
 
 ### Environments
 
-The client targets the sandbox by default. Set `environment: 'production'` to go live, or pass an explicit `baseUrl` to override both.
+The client targets the sandbox by default. Set `environment: 'production'` to go live, or pass an explicit `baseUrl` to override both. Only `sandbox` and `production` are accepted; anything else is rejected at construction.
 
 | Environment  | Base URL                            |
 | ------------ | ----------------------------------- |
 | `sandbox`    | `https://testapi.smileidentity.com` |
 | `production` | `https://api.smileidentity.com`     |
+
+### HTTPS requirements
+
+The SDK talks to Smile ID over HTTPS only:
+
+- `baseUrl` must be an absolute `https://` URL with no query string or fragment. There is no option to allow plain HTTP.
+- `defaultCallbackUrl` and every per-request `callbackUrl` must be `https://` URLs. A non-HTTPS callback raises `ValidationError` before any request is sent.
+
+Both are checked at client construction; per-request callback URLs are checked again before each send.
 
 ### Other options
 
@@ -277,6 +286,7 @@ Every failure throws a subclass of `SmileIDError`. Each error carries `statusCod
 | `RateLimitError`       | 429                                                        |
 | `APIError`             | 5xx                                                        |
 | `ConnectionError`      | Network failure with no HTTP response                      |
+| `UnexpectedResponseError` | A 2xx response whose body is not a JSON object          |
 | `TimeoutError`         | `waitUntilComplete` deadline passed                        |
 
 ```ts
