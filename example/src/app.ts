@@ -86,7 +86,10 @@ function parseGlobalFlags(argv: string[], env: Env, fetchImpl?: FetchLike): {
   while (args[0]?.startsWith('--')) {
     const flag = args.shift();
     if (!flag) break;
-    const value = args.shift() ?? '';
+    const value = args.shift();
+    if (!value) {
+      throw new UsageError(`${flag} requires a value`);
+    }
     switch (flag) {
       case '--partner-id':
         config.partnerId = value;
@@ -211,7 +214,10 @@ function requiredFlag(args: string[], name: string): string {
 function stringFlag(args: string[], name: string, fallback?: string): string | undefined {
   const i = args.indexOf(name);
   if (i === -1) return fallback;
-  return args[i + 1] || fallback;
+  if (i + 1 >= args.length) throw new UsageError(`${name} requires a value`);
+  const value = args[i + 1];
+  args.splice(i, 2);
+  return value || fallback;
 }
 
 function writeJson(stdout: NodeJS.WritableStream, value: unknown): void {

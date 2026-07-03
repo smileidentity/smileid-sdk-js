@@ -154,7 +154,7 @@ function fakeFetch(): {
       return state.tokenCalls;
     },
     fetch: async (input, init) => {
-      const bodyText = init?.body ? Buffer.from(init.body as BodyInit as string).toString('utf8') : '';
+      const bodyText = init?.body ? await new Response(init.body).text() : '';
       const headers = Object.fromEntries(new Headers(init?.headers).entries());
       const req = {
         url: input.toString(),
