@@ -63,6 +63,8 @@ export class RateLimitError extends SmileIDError {}
 export class APIError extends SmileIDError {}
 /** Network failure or transport error with no HTTP response. */
 export class ConnectionError extends SmileIDError {}
+/** A 2xx success response whose body is not a JSON object (fleet standard). */
+export class UnexpectedResponseError extends SmileIDError {}
 /** SDK-local: raised by `verifications.waitUntilComplete` when the deadline passes. */
 export class TimeoutError extends SmileIDError {}
 /** SDK-local: client-side validation failure raised before a request is sent. */

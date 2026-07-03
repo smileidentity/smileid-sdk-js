@@ -7,7 +7,7 @@
  * the only layer that touches HTTP.
  */
 
-import { ConnectionError, parseError } from '../errors/index.js';
+import { ConnectionError, parseError, UnexpectedResponseError } from '../errors/index.js';
 import { buildSignatureHeaders, TokenManager } from './auth.js';
 import type { ResolvedConfig } from './config.js';
 import type { SerializedMultipart } from '../helpers/multipart.js';
@@ -192,7 +192,18 @@ export class Transport {
       const requestId = resp.headers.get('x-request-id');
 
       if (resp.status >= 200 && resp.status < 300) {
-        return { statusCode: resp.status, json: safeJson(rawBody), rawBody, requestId };
+        const json = safeJson(rawBody);
+        // Fleet standard: a success body must be a JSON object. The
+        // retrieve 404 → not_found path below is unaffected.
+        if (json === null || typeof json !== 'object' || Array.isArray(json)) {
+          throw new UnexpectedResponseError({
+            statusCode: resp.status,
+            message: 'Expected a JSON object in the response body.',
+            rawBody,
+            requestId,
+          });
+        }
+        return { statusCode: resp.status, json, rawBody, requestId };
       }
 
       // Refresh-on-401 once, then surface AuthenticationError (spec §2.3 item 5).

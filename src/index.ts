@@ -65,6 +65,7 @@ export {
   RateLimitError,
   APIError,
   ConnectionError,
+  UnexpectedResponseError,
   TimeoutError,
   ValidationError,
 } from './errors/index.js';
