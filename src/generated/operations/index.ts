@@ -10,6 +10,7 @@
 import { resolveBinary } from '../../helpers/binary.js';
 import { buildMultipart, type MultipartPart } from '../../helpers/multipart.js';
 import { camelizeKeys } from '../../helpers/case.js';
+import { assertHttpsUrl } from '../../helpers/validation.js';
 import type { RequestPlan, Transport } from '../../client/transport.js';
 import {
   AcceptedResponse,
@@ -159,7 +160,13 @@ function effectiveCallback(
   opts: RequestOptions | undefined,
   transport: Transport,
 ): string | undefined {
-  return paramCb ?? opts?.callbackUrl ?? transport.defaultCallbackUrl ?? undefined;
+  const callback = paramCb ?? opts?.callbackUrl ?? transport.defaultCallbackUrl ?? undefined;
+  // Fleet standard: callback URLs must be https; checked before any request
+  // (including the token fetch) is made.
+  if (callback !== undefined) {
+    assertHttpsUrl(callback, 'callbackUrl');
+  }
+  return callback;
 }
 
 function planExtras(opts?: RequestOptions): Pick<RequestPlan, 'timeout' | 'signal'> {

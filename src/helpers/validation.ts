@@ -12,6 +12,32 @@ import type {
   UserDetails,
 } from '../generated/models/index.js';
 
+/**
+ * URLs given to the SDK must be absolute https URLs (fleet standard). Applies
+ * to the base URL (which additionally may not carry a query or fragment) and
+ * to callback URLs, both at construction and per request.
+ */
+export function assertHttpsUrl(
+  value: string,
+  label: string,
+  opts: { forbidQueryAndFragment?: boolean } = {},
+): void {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new ValidationError({ message: `${label} must be an absolute https URL.` });
+  }
+  if (url.protocol !== 'https:') {
+    throw new ValidationError({ message: `${label} must use https.` });
+  }
+  if (opts.forbidQueryAndFragment && (url.search !== '' || url.hash !== '')) {
+    throw new ValidationError({
+      message: `${label} must not contain a query string or fragment.`,
+    });
+  }
+}
+
 /** user_details must carry at least one of email / phone_number (spec §5.1). */
 export function validateUserDetails(userDetails: UserDetails): void {
   const hasEmail = typeof userDetails.email === 'string' && userDetails.email.length > 0;
