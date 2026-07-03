@@ -24,6 +24,8 @@ export interface SmileIDConfig {
   defaultCallbackUrl?: string;
   /** Explicit base URL override; wins over environment. */
   baseUrl?: string;
+  /** Allows http:// loopback baseUrl values for local tests only. */
+  allowInsecureBaseUrl?: boolean;
   /** Per-request total timeout in milliseconds. Default 30000. */
   timeout?: number;
   /** Retries for idempotent operations only. Default 2. */
@@ -62,7 +64,14 @@ export function resolveConfig(config: SmileIDConfig): ResolvedConfig {
     throw new TypeError('apiKey is required.');
   }
   const environment: Environment = config.environment ?? 'sandbox';
-  const baseUrl = (config.baseUrl ?? BASE_URLS[environment]).replace(/\/+$/, '');
+  if (environment !== 'sandbox' && environment !== 'production') {
+    throw new TypeError('environment must be "sandbox" or "production".');
+  }
+  const baseUrl = normalizeBaseUrl(
+    config.baseUrl ?? BASE_URLS[environment],
+    config.allowInsecureBaseUrl === true,
+  );
+  if (config.defaultCallbackUrl) validateCallbackUrl(config.defaultCallbackUrl);
   const fetchImpl = config.fetch ?? (globalThis.fetch as FetchLike | undefined);
   if (!fetchImpl) {
     throw new TypeError(
@@ -80,4 +89,39 @@ export function resolveConfig(config: SmileIDConfig): ResolvedConfig {
     maxRetries: config.maxRetries ?? 2,
     fetch: fetchImpl,
   };
+}
+
+function normalizeBaseUrl(value: string, allowInsecure: boolean): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new TypeError('baseUrl must be an absolute URL.');
+  }
+  if (parsed.search || parsed.hash) {
+    throw new TypeError('baseUrl must not include query or fragment.');
+  }
+  if (parsed.protocol === 'https:') {
+    return parsed.toString().replace(/\/+$/, '');
+  }
+  if (allowInsecure && parsed.protocol === 'http:' && isLoopbackHost(parsed.hostname)) {
+    return parsed.toString().replace(/\/+$/, '');
+  }
+  throw new TypeError('baseUrl must use https.');
+}
+
+export function validateCallbackUrl(value: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new TypeError('callbackUrl must be an absolute URL.');
+  }
+  if (parsed.protocol !== 'https:') {
+    throw new TypeError('callbackUrl must use https.');
+  }
+}
+
+function isLoopbackHost(host: string): boolean {
+  return host === 'localhost' || host === '::1' || host.startsWith('127.');
 }

@@ -4,6 +4,9 @@ import assert from 'node:assert/strict';
 import { ValidationError } from '../errors/index.js';
 import {
   validateAuthentication,
+  validateDocumentVerification,
+  validateEnhancedKyc,
+  validateIdStatus,
   validateReportFraud,
   validateUserDetails,
 } from './validation.js';
@@ -80,6 +83,37 @@ test('validateAuthentication requires images unless useEnrolledImage', () => {
   );
 });
 
+test('entry validators enforce required fields and liveness count', () => {
+  const common = {
+    userDetails: { givenNames: 'John', lastName: 'Doe', email: 'john@example.com' },
+    consent: {
+      granted: true as const,
+      grantedAt: '2026-03-06T12:00:00.000Z',
+      noticeLanguage: 'EN',
+      noticePrivacyPolicyUrl: 'https://example.com/privacy',
+    },
+  };
+  assert.throws(
+    () => validateEnhancedKyc({ ...common, country: '', idType: 'NIN', idNumber: '1' }),
+    ValidationError,
+  );
+  assert.throws(
+    () =>
+      validateDocumentVerification({
+        ...common,
+        country: 'NG',
+        selfieImage: FAKE_IMAGE,
+        livenessImages: FAKE_LIVENESS.slice(0, 5),
+        document: FAKE_IMAGE,
+      }),
+    ValidationError,
+  );
+});
+
+test('idStatus requires country and idType', () => {
+  assert.throws(() => validateIdStatus({ country: 'NG', idType: '' }), ValidationError);
+});
+
 // Cross-SDK standard: verifyEnhanced enforces idType client-side (spec §6.3),
 // including for plain-JavaScript callers who bypass the compile-time check.
 test('documents.verifyEnhanced rejects a missing idType before sending', () => {
@@ -106,5 +140,29 @@ test('documents.verifyEnhanced rejects a missing idType before sending', () => {
         params as unknown as Parameters<typeof client.documents.verifyEnhanced>[0],
       ),
     ValidationError,
+  );
+});
+
+test('request callback URL must use HTTPS', async () => {
+  const fetch = async (): Promise<Response> => {
+    throw new Error('no request should be sent');
+  };
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  await assert.rejects(
+    () =>
+      client.enhancedKyc.verify({
+        country: 'NG',
+        idType: 'NIN',
+        idNumber: '12345678901',
+        userDetails: { givenNames: 'John', lastName: 'Doe', email: 'john@example.com' },
+        consent: {
+          granted: true,
+          grantedAt: '2026-03-06T12:00:00.000Z',
+          noticeLanguage: 'EN',
+          noticePrivacyPolicyUrl: 'https://example.com/privacy',
+        },
+        callbackUrl: 'http://partner.example.com/webhook',
+      }),
+    TypeError,
   );
 });

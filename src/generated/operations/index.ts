@@ -9,6 +9,7 @@
 
 import { resolveBinary } from '../../helpers/binary.js';
 import { buildMultipart, type MultipartPart } from '../../helpers/multipart.js';
+import { validateCallbackUrl } from '../../client/config.js';
 import { camelizeKeys } from '../../helpers/case.js';
 import type { RequestPlan, Transport } from '../../client/transport.js';
 import {
@@ -159,7 +160,9 @@ function effectiveCallback(
   opts: RequestOptions | undefined,
   transport: Transport,
 ): string | undefined {
-  return paramCb ?? opts?.callbackUrl ?? transport.defaultCallbackUrl ?? undefined;
+  const callbackUrl = paramCb ?? opts?.callbackUrl ?? transport.defaultCallbackUrl ?? undefined;
+  if (callbackUrl !== undefined) validateCallbackUrl(callbackUrl);
+  return callbackUrl;
 }
 
 function planExtras(opts?: RequestOptions): Pick<RequestPlan, 'timeout' | 'signal'> {

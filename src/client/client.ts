@@ -9,12 +9,17 @@
 import { resolveConfig, type SmileIDConfig } from './config.js';
 import { Transport } from './transport.js';
 import * as ops from '../generated/operations/index.js';
-import { ValidationError } from '../errors/index.js';
 import { waitUntilComplete } from '../helpers/poll.js';
 import {
   validateAuthentication,
+  validateBiometricKyc,
+  validateCompare,
+  validateDocumentVerification,
+  validateEnhancedDocumentVerification,
+  validateEnhancedKyc,
+  validateIdStatus,
+  validateRegistration,
   validateReportFraud,
-  validateUserDetails,
 } from '../helpers/validation.js';
 import type {
   AcceptedResponse,
@@ -128,48 +133,40 @@ export class SmileID {
 
     this.enhancedKyc = {
       verify: (params, options) => {
-        validateUserDetails(params.userDetails);
+        validateEnhancedKyc(params);
         return ops.enhancedKyc(t, params, options);
       },
     };
 
     this.documents = {
       verify: (params, options) => {
-        validateUserDetails(params.userDetails);
+        validateDocumentVerification(params);
         return ops.documentVerification(t, params, options);
       },
       verifyEnhanced: (params, options) => {
-        validateUserDetails(params.userDetails);
-        // idType is required for enhanced document verification (spec §6.3);
-        // enforced at runtime for plain-JavaScript callers too.
-        if (!params.idType) {
-          throw new ValidationError({
-            message: 'idType is required for enhanced document verification.',
-          });
-        }
+        validateEnhancedDocumentVerification(params);
         return ops.enhancedDocumentVerification(t, params, options);
       },
     };
 
     this.biometricKyc = {
       verify: (params, options) => {
-        validateUserDetails(params.userDetails);
+        validateBiometricKyc(params);
         return ops.biometricKyc(t, params, options);
       },
     };
 
     this.biometric = {
       enroll: (params, options) => {
-        validateUserDetails(params.userDetails);
+        validateRegistration(params);
         return ops.registration(t, params, options);
       },
       authenticate: (params, options) => {
-        validateUserDetails(params.userDetails);
         validateAuthentication(params);
         return ops.authentication(t, params, options);
       },
       compare: (params, options) => {
-        validateUserDetails(params.userDetails);
+        validateCompare(params);
         return ops.compare(t, params, options);
       },
     };
@@ -218,7 +215,10 @@ export class SmileID {
       bankCodes: (params, options) => ops.bankCodes(t, params, options),
       supportedIdTypes: (params, options) => ops.supportedIdTypes(t, params, options),
       supportedDocuments: (params, options) => ops.supportedDocuments(t, params, options),
-      idStatus: (params, options) => ops.idStatus(t, params, options),
+      idStatus: (params, options) => {
+        validateIdStatus(params);
+        return ops.idStatus(t, params, options);
+      },
     };
   }
 }

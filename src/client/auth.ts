@@ -94,8 +94,8 @@ export class TokenManager {
 }
 
 /**
- * HMAC signing headers (spec §2.5). Provisional construction — confirm with the
- * backend before enabling in production. Signs `timestamp + body bytes`.
+ * HMAC signing headers (spec §2.5). Signing is optional and enabled only when
+ * a partner secret is configured. Signs `timestamp + body bytes`.
  */
 export function buildSignatureHeaders(
   partnerSecret: string,
