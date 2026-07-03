@@ -2,13 +2,13 @@
  * The single internal transport (spec §2.2, §2.6, §2A).
  *
  * Every resource method funnels through here. It builds the URL, attaches auth
- * and telemetry headers, optionally signs, serializes the body, sends, applies
+ * and telemetry headers, serializes the body, sends, applies
  * the retry policy, and parses the response into a typed result or error. It is
  * the only layer that touches HTTP.
  */
 
 import { ConnectionError, parseError, UnexpectedResponseError } from '../errors/index.js';
-import { buildSignatureHeaders, TokenManager } from './auth.js';
+import { TokenManager } from './auth.js';
 import type { ResolvedConfig } from './config.js';
 import type { SerializedMultipart } from '../helpers/multipart.js';
 import { VERSION } from '../version.js';
@@ -121,7 +121,7 @@ export class Transport {
     };
   }
 
-  /** Execute a request plan, applying auth, signing, retries, and error parsing. */
+  /** Execute a request plan, applying auth, retries, and error parsing. */
   async execute(plan: RequestPlan): Promise<TransportResult> {
     const url = this.buildUrl(plan);
     let attempt = 0;
@@ -141,19 +141,12 @@ export class Transport {
       }
 
       let body: Buffer | string | undefined;
-      let bodyBytes: Buffer | null = null;
       if (plan.multipart) {
         headers['Content-Type'] = plan.multipart.contentType;
         body = plan.multipart.body;
-        bodyBytes = plan.multipart.body;
       } else if (plan.json !== undefined) {
         headers['Content-Type'] = 'application/json';
         body = JSON.stringify(plan.json);
-        bodyBytes = Buffer.from(body, 'utf8');
-      }
-
-      if (this.config.partnerSecret) {
-        Object.assign(headers, buildSignatureHeaders(this.config.partnerSecret, bodyBytes));
       }
 
       const controller = new AbortController();

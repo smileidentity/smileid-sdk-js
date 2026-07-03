@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `job_id` / `user_id` path parameters are URL-encoded as single path
   segments.
 
+### Removed
+
+- The `partnerSecret` option and HMAC request signing
+  (`SmileID-Timestamp` / `SmileID-Request-Signature` headers). Request
+  signing may be reintroduced if a signing contract is agreed with the
+  backend.
+
 ### Changed
 
 - Renamed the package from `@smileid/core` to `@smileid/smileid`.
@@ -39,4 +46,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Retry policy for idempotent operations with `Retry-After` support.
 - `Consent.granted` builder and client-side request validation.
 - Always-on SDK telemetry headers.
-- Optional HMAC request signing, off unless `partnerSecret` is set.

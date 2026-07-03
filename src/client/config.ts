@@ -20,8 +20,6 @@ export interface SmileIDConfig {
   apiKey: string;
   /** Environment. Sandbox by default. */
   environment?: Environment;
-  /** When set, enables HMAC request signing (spec §2.5). When unset, HMAC is off. */
-  partnerSecret?: string;
   /** Used when a call omits callbackUrl. */
   defaultCallbackUrl?: string;
   /** Explicit base URL override; wins over environment. */
@@ -45,7 +43,6 @@ export interface ResolvedConfig {
   partnerId: string;
   apiKey: string;
   environment: Environment;
-  partnerSecret: string | null;
   defaultCallbackUrl: string | null;
   baseUrl: string;
   timeout: number;
@@ -87,7 +84,6 @@ export function resolveConfig(config: SmileIDConfig): ResolvedConfig {
     partnerId: config.partnerId,
     apiKey: config.apiKey,
     environment,
-    partnerSecret: config.partnerSecret ?? null,
     defaultCallbackUrl: config.defaultCallbackUrl ?? null,
     baseUrl,
     timeout: config.timeout ?? 30000,
