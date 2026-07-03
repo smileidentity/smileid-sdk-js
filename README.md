@@ -1,4 +1,4 @@
-# @smileid/core
+# @smileid/smileid
 
 ![npm version](https://img.shields.io/badge/npm-unpublished-lightgrey)
 ![CI status](https://img.shields.io/badge/CI-pending-lightgrey)
@@ -15,7 +15,7 @@ Node.js 18 or later. The SDK uses the built-in global `fetch` and has no runtime
 ## Install
 
 ```sh
-npm install @smileid/core
+npm install @smileid/smileid
 ```
 
 ## Create a client
@@ -23,7 +23,7 @@ npm install @smileid/core
 Construct a client with your partner id and API key. The SDK handles authentication for you: it fetches an internal token, caches it until just before expiry, and refreshes it once on a 401. You never handle tokens yourself.
 
 ```ts
-import { SmileID } from '@smileid/core';
+import { SmileID } from '@smileid/smileid';
 
 const smile = new SmileID({
   partnerId: '1234',
@@ -58,7 +58,7 @@ The client targets the sandbox by default. Set `environment: 'production'` to go
 Every verification call takes a `consent` block and `userDetails`. Build consent with the `Consent.granted` helper. `userDetails` needs at least one of `email` or `phoneNumber` — the SDK checks this before sending.
 
 ```ts
-import { Consent } from '@smileid/core';
+import { Consent } from '@smileid/smileid';
 
 const consent = Consent.granted({
   grantedAt: new Date(),
@@ -280,7 +280,7 @@ Every failure throws a subclass of `SmileIDError`. Each error carries `statusCod
 | `TimeoutError`         | `waitUntilComplete` deadline passed                        |
 
 ```ts
-import { PaymentRequiredError, SmileIDError } from '@smileid/core';
+import { PaymentRequiredError, SmileIDError } from '@smileid/smileid';
 
 try {
   await smile.enhancedKyc.verify({ /* ... */ });

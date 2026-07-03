@@ -1,8 +1,8 @@
 /**
- * @smileid/core — the official Smile ID server-side SDK for JavaScript/TypeScript.
+ * @smileid/smileid — the official Smile ID server-side SDK for JavaScript/TypeScript.
  *
  * ```ts
- * import { SmileID, Consent } from '@smileid/core';
+ * import { SmileID, Consent } from '@smileid/smileid';
  * ```
  */
 
