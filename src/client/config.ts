@@ -2,6 +2,8 @@
  * Client configuration and resolution (spec §2.1).
  */
 
+import { ValidationError } from '../errors/index.js';
+import { assertHttpsUrl } from '../helpers/validation.js';
 import type { Environment } from '../generated/models/index.js';
 
 /** The `fetch` implementation the SDK uses. Injectable for testing/proxies. */
@@ -62,7 +64,19 @@ export function resolveConfig(config: SmileIDConfig): ResolvedConfig {
     throw new TypeError('apiKey is required.');
   }
   const environment: Environment = config.environment ?? 'sandbox';
-  const baseUrl = (config.baseUrl ?? BASE_URLS[environment]).replace(/\/+$/, '');
+  // Runtime guard for plain-JavaScript callers; the TS union covers TS callers.
+  if (environment !== 'sandbox' && environment !== 'production') {
+    throw new ValidationError({
+      message: 'environment must be "sandbox" or "production".',
+    });
+  }
+  const rawBaseUrl = config.baseUrl ?? BASE_URLS[environment];
+  // Fleet standard: absolute https, no query or fragment. No escape hatch.
+  assertHttpsUrl(rawBaseUrl, 'baseUrl', { forbidQueryAndFragment: true });
+  const baseUrl = rawBaseUrl.replace(/\/+$/, '');
+  if (config.defaultCallbackUrl !== undefined) {
+    assertHttpsUrl(config.defaultCallbackUrl, 'defaultCallbackUrl');
+  }
   const fetchImpl = config.fetch ?? (globalThis.fetch as FetchLike | undefined);
   if (!fetchImpl) {
     throw new TypeError(

@@ -7,11 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- `baseUrl` must be an absolute https URL with no query string or fragment,
+  validated at construction. No insecure override exists.
+- `defaultCallbackUrl` and per-request `callbackUrl` values must be https;
+  a non-https callback raises `ValidationError` before any request is sent.
+- Multipart filenames and content types are sanitized against header
+  injection on every path, including caller-supplied explicit content types.
+- `job_id` / `user_id` path parameters are URL-encoded as single path
+  segments.
+
 ### Changed
 
 - Renamed the package from `@smileid/core` to `@smileid/smileid`.
 - Set the version to 12.0.0, aligning the server SDKs with the V12
   mobile SDKs.
+- `environment` is validated at runtime: anything other than `sandbox` or
+  `production` is rejected at construction.
+- A 2xx response whose body is not a JSON object now raises the new
+  `UnexpectedResponseError`.
 
 ### Added
 
