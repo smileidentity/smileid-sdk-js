@@ -2,9 +2,9 @@
  * Multipart/form-data serialization (spec §5.3).
  *
  * Built by hand (rather than via the platform FormData) so the exact wire bytes
- * are known: this lets the golden-fixture tests assert the precise structure,
- * lets HMAC signing run over the exact serialized body (spec §2.5), and keeps
- * JSON object parts free of the spurious `filename="blob"` the platform adds.
+ * are known: this lets the golden-fixture tests assert the precise structure
+ * and keeps JSON object parts free of the spurious `filename="blob"` the
+ * platform adds.
  *
  * Rules applied here:
  *  - scalar fields → plain text part;

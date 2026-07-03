@@ -1,5 +1,5 @@
 /**
- * Internal JWT token lifecycle (spec §2.3, §2A) and the optional HMAC signer (§2.5).
+ * Internal JWT token lifecycle (spec §2.3, §2A).
  *
  * Partners never see or pass a token. The manager fetches one from
  * POST /v3/token, caches it until `exp − 60s`, and refreshes on demand. Token
@@ -12,8 +12,6 @@
  * typed-error mapping (network failures raise ConnectionError) as every other
  * idempotent operation.
  */
-
-import { createHmac } from 'node:crypto';
 
 import { parseError } from '../errors/index.js';
 import { decodeJwtExp } from '../helpers/jwt.js';
@@ -93,21 +91,3 @@ export class TokenManager {
   }
 }
 
-/**
- * HMAC signing headers (spec §2.5). Provisional construction — confirm with the
- * backend before enabling in production. Signs `timestamp + body bytes`.
- */
-export function buildSignatureHeaders(
-  partnerSecret: string,
-  bodyBytes: Buffer | null,
-  now: () => number = () => Date.now(),
-): Record<string, string> {
-  const timestamp = new Date(now()).toISOString(); // ISO 8601 with milliseconds
-  const hmac = createHmac('sha256', partnerSecret);
-  hmac.update(timestamp);
-  if (bodyBytes) hmac.update(bodyBytes);
-  return {
-    'SmileID-Timestamp': timestamp,
-    'SmileID-Request-Signature': hmac.digest('hex'),
-  };
-}

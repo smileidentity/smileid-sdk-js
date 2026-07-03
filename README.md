@@ -55,7 +55,6 @@ Both are checked at client construction; per-request callback URLs are checked a
 
 | Option               | Default    | Purpose                                                       |
 | -------------------- | ---------- | ------------------------------------------------------------- |
-| `partnerSecret`      | unset      | Enables HMAC request signing when set (see below)             |
 | `defaultCallbackUrl` | unset      | Used when a call omits `callbackUrl`                          |
 | `baseUrl`            | derived    | Explicit override; wins over `environment`                    |
 | `timeout`            | 30000 ms   | Per-request total timeout                                     |
@@ -310,10 +309,6 @@ The SDK retries idempotent operations only (status and services reads, plus the 
 ## Telemetry
 
 Every request carries three headers identifying the SDK: `SmileID-Source-SDK: node`, `SmileID-Source-SDK-Version`, and a `User-Agent` with the runtime version. These are observability metadata only; they are never used for authentication and carry no personal data.
-
-## HMAC request signing
-
-Signing is off by default. When you set `partnerSecret`, the SDK adds `SmileID-Timestamp` and `SmileID-Request-Signature` headers, signing the timestamp plus the exact request body bytes with HMAC-SHA256. The signature construction is provisional: confirm it with Smile ID before relying on it in production.
 
 ## License
 

@@ -39,4 +39,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Retry policy for idempotent operations with `Retry-After` support.
 - `Consent.granted` builder and client-side request validation.
 - Always-on SDK telemetry headers.
-- Optional HMAC request signing, off unless `partnerSecret` is set.

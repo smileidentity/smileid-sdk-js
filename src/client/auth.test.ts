@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { TokenManager, buildSignatureHeaders, type ExecuteFn } from './auth.js';
+import { TokenManager, type ExecuteFn } from './auth.js';
 import type { TransportResult } from './transport.js';
 import { AuthenticationError, ConnectionError } from '../errors/index.js';
 import { SmileID } from './client.js';
@@ -146,10 +146,4 @@ test('the three unauthenticated services calls never fetch a token', async () =>
   await client.services.supportedIdTypes();
   await client.services.supportedDocuments();
   assert.equal(tokenFetches, 0);
-});
-
-test('buildSignatureHeaders signs timestamp + body with the partner secret', () => {
-  const headers = buildSignatureHeaders('secret', Buffer.from('hello'), () => 0);
-  assert.equal(headers['SmileID-Timestamp'], '1970-01-01T00:00:00.000Z');
-  assert.match(headers['SmileID-Request-Signature'], /^[0-9a-f]{64}$/);
 });

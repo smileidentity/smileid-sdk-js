@@ -368,28 +368,6 @@ test('supported_documents: no token, country_code and locale query params', asyn
   assert.equal(req.headers['SmileID-Token'], undefined);
 });
 
-// spec §2.5 — HMAC headers appear only when partnerSecret is configured.
-test('HMAC signing is off by default and on with partnerSecret', async () => {
-  const off = routerFetch(() => accepted202('Accepted'));
-  const clientOff = new SmileID({ partnerId: '1234', apiKey: 'k', fetch: off.fetch });
-  await clientOff.enhancedKyc.verify({
-    country: 'NG', idType: 'NIN', idNumber: '1', userDetails, consent,
-  });
-  const reqOff = opRequest(off.requests);
-  assert.equal(reqOff.headers['SmileID-Timestamp'], undefined);
-  assert.equal(reqOff.headers['SmileID-Request-Signature'], undefined);
-
-  const on = routerFetch(() => accepted202('Accepted'));
-  const clientOn = new SmileID({
-    partnerId: '1234', apiKey: 'k', partnerSecret: 's3cret', fetch: on.fetch,
-  });
-  await clientOn.enhancedKyc.verify({
-    country: 'NG', idType: 'NIN', idNumber: '1', userDetails, consent,
-  });
-  const reqOn = opRequest(on.requests);
-  assert.ok(reqOn.headers['SmileID-Timestamp']);
-  assert.match(reqOn.headers['SmileID-Request-Signature'], /^[0-9a-f]{64}$/);
-});
 
 // Cross-SDK content-type policy (spec §5.3): PNG detection applies only to
 // document and document_back; selfie/liveness/comparison are always image/jpeg.
