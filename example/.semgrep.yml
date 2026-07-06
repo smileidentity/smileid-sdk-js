@@ -1,0 +1,16 @@
+rules:
+  - id: js-hardcoded-smile-credentials
+    message: Do not hard-code Smile ID credentials; read them from environment variables or a secret manager.
+    severity: ERROR
+    languages:
+      - typescript
+      - javascript
+    patterns:
+      - pattern-either:
+          - pattern: |
+              new SmileID({..., apiKey: "...", ...})
+          - pattern: |
+              new SmileID({..., partnerSecret: "...", ...})
+    metadata:
+      category: security
+      confidence: MEDIUM
