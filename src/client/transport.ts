@@ -36,8 +36,6 @@ export interface RequestPlan {
   headers?: Record<string, string | undefined>;
   /** Multipart body, when the operation sends one. */
   multipart?: SerializedMultipart;
-  /** JSON body (replay only). */
-  json?: unknown;
   /** When true, a final 404 returns the parsed body instead of raising (spec §6.8). */
   allow404?: boolean;
   /** Per-request options. */
@@ -144,9 +142,6 @@ export class Transport {
       if (plan.multipart) {
         headers['Content-Type'] = plan.multipart.contentType;
         body = plan.multipart.body;
-      } else if (plan.json !== undefined) {
-        headers['Content-Type'] = 'application/json';
-        body = JSON.stringify(plan.json);
       }
 
       const controller = new AbortController();
