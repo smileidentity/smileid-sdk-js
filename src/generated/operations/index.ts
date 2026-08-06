@@ -427,7 +427,11 @@ export async function replayCallback(
     authenticated: true,
     needsPartnerIdHeader: false,
     idempotent: false, // never auto-retried (spec §2.6, §6.10)
-    json: callbackUrl ? { callback_url: callbackUrl } : {},
+    // Multipart per the corrected replay spec (other content types get a 415);
+    // no override means no body at all.
+    ...(callbackUrl
+      ? { multipart: buildMultipart([{ kind: 'scalar', name: 'callback_url', value: callbackUrl }]) }
+      : {}),
     ...planExtras(opts),
   });
   return toAccepted(result.json);
