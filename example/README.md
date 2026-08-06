@@ -1,6 +1,6 @@
 # Smile ID JavaScript SDK Example
 
-This repository is a small TypeScript command-line application that demonstrates the public `@smileid/smileid` server-side SDK.
+This repository is a small TypeScript command-line application that demonstrates the public `@smileid/usesmileid-nodejs` server-side SDK.
 
 It also acts as a testbench: the tests run the same CLI code with the SDK's public injectable `fetch` option and verify the HTTP requests the SDK would send.
 
@@ -14,7 +14,7 @@ It also acts as a testbench: the tests run the same CLI code with the SDK's publ
 This example depends on the sibling SDK checkout:
 
 ```json
-"@smileid/smileid": "file:.."
+"@smileid/usesmileid-nodejs": "file:.."
 ```
 
 Install dependencies:

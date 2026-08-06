@@ -4,7 +4,7 @@ This repository is a standalone example application for the Smile ID JavaScript 
 
 ## Development rules
 
-- Use only the public API exported by `@smileid/smileid`.
+- Use only the public API exported by `@smileid/usesmileid-nodejs`.
 - Keep tests deterministic by injecting `fetch`; do not require real Smile ID credentials for unit or integration-style tests.
 - Keep examples small and explicit.
 - Keep credentials out of source control and docs.
