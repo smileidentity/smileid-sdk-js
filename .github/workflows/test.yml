@@ -28,6 +28,9 @@ jobs:
         run: npm run build
       - name: Test
         run: npm test
+      - name: Test example
+        run: npm ci && npm test
+        working-directory: example
   lint:
     runs-on: ubuntu-latest
     steps:
