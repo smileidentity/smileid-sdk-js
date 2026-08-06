@@ -8,11 +8,11 @@
   "scripts": {
     "build:sdk": "npm --prefix .. run build",
     "build": "tsc",
-    "test": "npm run build:sdk && npm run build && node --test dist/**/*.test.js",
+    "test": "npm run build:sdk && npm run build && node --test $(find dist -name '*.test.js')",
     "lint": "eslint ."
   },
   "dependencies": {
-    "@smileid/smileid": "file:.."
+    "@smileid/usesmileid-nodejs": "file:.."
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
