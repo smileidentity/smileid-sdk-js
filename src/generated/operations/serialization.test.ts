@@ -154,8 +154,7 @@ test('report_fraud: multipart scalar parts', async () => {
   assert.match(body, /name="reason"\r\n\r\nACCOUNT_TAKEOVER\r\n/);
 });
 
-// spec §6.10 — replay uses a JSON body, not multipart.
-// spec correction: replay takes multipart/form-data (any other content type → 415).
+// spec §6.10 as corrected — replay takes multipart/form-data (any other content type → 415).
 test('replay with a callback override: multipart body with one callback_url text part', async () => {
   const { fetch, requests } = routerFetch(() =>
     jsonResponse(202, { status: 'accepted', job_id: 'job_1', user_id: 'test-user', message: 'ok' }),
