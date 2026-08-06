@@ -1,4 +1,4 @@
-import { Consent, SmileID, type FetchLike } from '@smileid/smileid';
+import { Consent, SmileID, type FetchLike } from '@smileid/usesmileid-nodejs';
 
 export interface Env {
   [key: string]: string | undefined;

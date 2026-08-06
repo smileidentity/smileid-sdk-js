@@ -112,9 +112,11 @@ void test('replay command requests callback replay', async () => {
   assert.equal(result.jobId, 'job_enhanced_123');
   const request = fake.requests.find((r) => r.url.endsWith('/v3/replay/job_enhanced_123'));
   assert.ok(request);
-  assert.deepEqual(JSON.parse(request.bodyText), {
-    callback_url: 'https://example.com/replay-callback',
-  });
+  // Replay sends multipart/form-data: one text part named callback_url.
+  assert.match(
+    request.bodyText,
+    /Content-Disposition: form-data; name="callback_url"\r\n\r\nhttps:\/\/example.com\/replay-callback\r\n/,
+  );
 });
 
 void test('help does not require credentials', async () => {

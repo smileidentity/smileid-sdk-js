@@ -162,7 +162,7 @@ export interface CompareParams extends EntryParamsBase {
   sandboxResult?: number;
 }
 
-/** verifications.replay optional JSON body (spec §6.10). */
+/** verifications.replay optional body (spec §6.10, corrected to multipart). */
 export interface ReplayParams {
   callbackUrl?: string;
 }

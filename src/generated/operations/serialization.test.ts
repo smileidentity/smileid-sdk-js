@@ -154,8 +154,8 @@ test('report_fraud: multipart scalar parts', async () => {
   assert.match(body, /name="reason"\r\n\r\nACCOUNT_TAKEOVER\r\n/);
 });
 
-// spec §6.10 — replay uses a JSON body, not multipart.
-test('replay: JSON body, not multipart', async () => {
+// spec §6.10 as corrected — replay takes multipart/form-data (any other content type → 415).
+test('replay with a callback override: multipart body with one callback_url text part', async () => {
   const { fetch, requests } = routerFetch(() =>
     jsonResponse(202, { status: 'accepted', job_id: 'job_1', user_id: 'test-user', message: 'ok' }),
   );
@@ -166,8 +166,28 @@ test('replay: JSON body, not multipart', async () => {
   });
 
   const req = opRequest(requests);
-  assert.equal(req.headers['Content-Type'], 'application/json');
-  assert.equal(req.bodyText, JSON.stringify({ callback_url: 'https://app.example.com/cb' }));
+  assert.match(req.headers['Content-Type'], /^multipart\/form-data; boundary=/);
+  // Exactly one part, a filename-less text part named callback_url.
+  assert.match(
+    req.bodyText,
+    /Content-Disposition: form-data; name="callback_url"\r\n\r\nhttps:\/\/app.example.com\/cb\r\n/,
+  );
+  assert.equal(countParts(req.bodyText, 'callback_url'), 1);
+  assert.ok(!req.bodyText.includes('filename='), 'text part carries no filename');
+  assert.ok(!req.bodyText.includes('application/json'), 'no JSON part');
+});
+
+test('replay without a callback override sends no body at all', async () => {
+  const { fetch, requests } = routerFetch(() =>
+    jsonResponse(202, { status: 'accepted', job_id: 'job_1', user_id: 'test-user', message: 'ok' }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  await client.verifications.replay('job_01h8x9y2z3a4b5c6d7e8f9g0h1');
+
+  const req = opRequest(requests);
+  assert.equal(req.bodyText, '', 'no body');
+  assert.equal(req.headers['Content-Type'], undefined, 'no Content-Type header');
 });
 
 // spec §6.15 — id_status query params, token required.
