@@ -58,7 +58,7 @@ export async function run(options: RunOptions): Promise<void> {
       await runStatus(smile, args, stdout);
       return;
     case 'replay':
-      await runReplay(smile, args, stdout);
+      await runReplay(smile, args, config, stdout);
       return;
     default:
       stderr.write(`unknown command ${command}\n`);
@@ -79,33 +79,27 @@ function parseGlobalFlags(argv: string[], env: Env, fetchImpl?: FetchLike): {
     timeout: Number(env.SMILE_TIMEOUT_MS ?? '30000'),
     fetch: fetchImpl,
   };
+  const setters: Record<string, (value: string) => void> = {
+    '--partner-id': (value) => { config.partnerId = value; },
+    '--api-key': (value) => { config.apiKey = value; },
+    '--base-url': (value) => { config.baseUrl = value; },
+    '--callback-url': (value) => { config.callbackUrl = value; },
+    '--timeout-ms': (value) => { config.timeout = Number(value); },
+  };
+
+  // Global flags are accepted before or after the command name; putting one
+  // after the command used to drop it silently.
   const args = [...argv];
-  while (args[0]?.startsWith('--')) {
-    const flag = args.shift();
-    if (!flag) break;
-    const value = args.shift();
-    if (!value) {
-      throw new UsageError(`${flag} requires a value`);
-    }
-    switch (flag) {
-      case '--partner-id':
-        config.partnerId = value;
-        break;
-      case '--api-key':
-        config.apiKey = value;
-        break;
-      case '--base-url':
-        config.baseUrl = value;
-        break;
-      case '--callback-url':
-        config.callbackUrl = value;
-        break;
-      case '--timeout-ms':
-        config.timeout = Number(value);
-        break;
-      default:
-        throw new UsageError(`unknown global flag ${flag}`);
-    }
+  for (;;) {
+    const i = args.findIndex((arg) => Object.hasOwn(setters, arg));
+    if (i === -1) break;
+    const value = args[i + 1];
+    if (!value) throw new UsageError(`${args[i]} requires a value`);
+    setters[args[i]](value);
+    args.splice(i, 2);
+  }
+  if (args[0]?.startsWith('--')) {
+    throw new UsageError(`unknown global flag ${args[0]}`);
   }
   return { config, command: args.shift(), args };
 }
@@ -186,10 +180,15 @@ async function runStatus(smile: SmileID, args: string[], stdout: NodeJS.Writable
   });
 }
 
-async function runReplay(smile: SmileID, args: string[], stdout: NodeJS.WritableStream): Promise<void> {
+async function runReplay(
+  smile: SmileID,
+  args: string[],
+  config: AppConfig,
+  stdout: NodeJS.WritableStream,
+): Promise<void> {
   const jobId = stringFlag(args, '--job-id') ?? args[0];
   if (!jobId) throw new UsageError('replay requires --job-id');
-  const callbackUrl = stringFlag(args, '--callback-url');
+  const callbackUrl = stringFlag(args, '--callback-url', config.callbackUrl);
   const replay = await smile.verifications.replay(jobId, callbackUrl ? { callbackUrl } : undefined);
   writeJson(stdout, {
     status: replay.status,
@@ -221,11 +220,19 @@ function writeJson(stdout: NodeJS.WritableStream, value: unknown): void {
 export function usage(): string {
   return `Usage:
   smileid-example-js [global flags] services --country NG
-  smileid-example-js [global flags] enhanced-kyc --country NG --id-type NIN --id-number 12345678901 --given-names Amina --last-name Okafor --email amina@example.com --privacy-url https://example.com/privacy
+  smileid-example-js [global flags] enhanced-kyc --country NG --id-type NIN --id-number 12345678901 --given-names "Amina Fatou" --last-name Clearwater --email amina.clearwater@example.com --privacy-url https://example.com/privacy
   smileid-example-js [global flags] status --job-id job_...
   smileid-example-js [global flags] replay --job-id job_... --callback-url https://example.com/webhook
 
-Global flags can also be set with SMILE_PARTNER_ID, SMILE_API_KEY,
-SMILE_BASE_URL, SMILE_CALLBACK_URL and SMILE_TIMEOUT_MS.
+Global flags: --partner-id, --api-key, --base-url, --callback-url, --timeout-ms.
+They may go before or after the command name, and can also be set with
+SMILE_PARTNER_ID, SMILE_API_KEY, SMILE_BASE_URL, SMILE_CALLBACK_URL and
+SMILE_TIMEOUT_MS.
+
+Partner ids are displayed zero-padded (for example 002) but must be passed
+without leading zeros (2).
+
+Non-production environments match test identities on given names, last name
+and email; an unrecognised identity resolves to block.
 `;
 }

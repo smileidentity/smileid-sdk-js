@@ -137,7 +137,7 @@ test('a hostile user_id is encoded as a single path segment', async () => {
 
 test('golden job ids pass through path encoding byte-identical', async () => {
   const { fetch, requests } = routerFetch(() =>
-    jsonResponse(200, { status: 'complete', job_id: 'job_1', message: 'done' }),
+    jsonResponse(200, { status: 'clear', job_id: 'job_1', message: 'Job completed' }),
   );
   const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
   await client.verifications.retrieve('job_01h8x9y2z3a4b5c6d7e8f9g0h1');

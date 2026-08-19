@@ -322,12 +322,18 @@ test('compare: comparison_image binary part, enum scalar, optional body user_id'
 // spec §6.8 — retrieve: GET with token, job id in the path.
 test('status: GET /v3/status/{jobId} with a token and no body', async () => {
   const { fetch, requests } = routerFetch(() =>
-    jsonResponse(200, { status: 'complete', job_id: 'job_1', user_id: 'user_1', message: 'done' }),
+    jsonResponse(200, {
+      status: 'clear',
+      job_id: 'job_1',
+      user_id: 'user_1',
+      message: 'Job completed',
+    }),
   );
   const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
 
   const js = await client.verifications.retrieve('job_01h8x9y2z3a4b5c6d7e8f9g0h1');
   assert.equal(js.isComplete, true);
+  assert.equal(js.status, 'clear');
 
   const req = opRequest(requests);
   assert.equal(req.method, 'GET');

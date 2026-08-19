@@ -10,7 +10,7 @@ This project is under active development and is not yet published to npm. The pa
 
 ## Requirements
 
-Node.js 18 or later. The SDK uses the built-in global `fetch` and has no runtime dependencies.
+Node.js 18 or later. The SDK uses the built-in global `fetch` and has no runtime dependencies. Development and CI use the version pinned in `.nvmrc`.
 
 ## Install
 
@@ -33,14 +33,26 @@ const smile = new SmileID({
 });
 ```
 
-### Environments
+Partner ids are displayed zero-padded (for example 002) but must be passed without leading zeros (2).
 
-The client targets the sandbox by default. Set `environment: 'production'` to go live, or pass an explicit `baseUrl` to override both. Only `sandbox` and `production` are accepted; anything else is rejected at construction.
+### Environments and base URL
+
+The client targets the sandbox by default. Set `environment: 'production'` to go live. Only `sandbox` and `production` are accepted; anything else is rejected at construction.
 
 | Environment  | Base URL                            |
 | ------------ | ----------------------------------- |
 | `sandbox`    | `https://testapi.smileidentity.com` |
 | `production` | `https://api.smileidentity.com`     |
+
+Any other host needs an explicit `baseUrl`, which wins over `environment`:
+
+```ts
+const smile = new SmileID({
+  partnerId: '2',
+  apiKey: process.env.SMILE_API_KEY!,
+  baseUrl: process.env.SMILE_BASE_URL ?? 'https://devapi.smileidentity.com',
+});
+```
 
 ### HTTPS requirements
 
@@ -56,7 +68,6 @@ Both are checked at client construction; per-request callback URLs are checked a
 | Option               | Default    | Purpose                                                       |
 | -------------------- | ---------- | ------------------------------------------------------------- |
 | `defaultCallbackUrl` | unset      | Used when a call omits `callbackUrl`                          |
-| `baseUrl`            | derived    | Explicit override; wins over `environment`                    |
 | `timeout`            | 30000 ms   | Per-request total timeout                                     |
 | `maxRetries`         | 2          | Retries for idempotent operations only                        |
 | `fetch`              | global     | Injectable fetch implementation for testing or proxies        |
@@ -74,8 +85,14 @@ const consent = Consent.granted({
   noticePrivacyPolicyUrl: 'https://example.com/privacy',
 });
 
-const userDetails = { givenNames: 'John', lastName: 'Doe', email: 'john@example.com' };
+const userDetails = {
+  givenNames: 'Amina Fatou',
+  lastName: 'Clearwater',
+  email: 'amina.clearwater@example.com',
+};
 ```
+
+Non-production environments match test identities on given names, last name and email. An unrecognised identity resolves to `block`.
 
 Image inputs (`selfieImage`, `livenessImages`, `document`, `comparisonImage`) accept a file path, a `Buffer`, a `Blob`, or a readable stream. Wrap one in `{ data, filename, contentType }` to override the filename or content type.
 
@@ -183,16 +200,19 @@ const accepted = await smile.biometric.compare({
 
 `retrieve` never throws on an unknown job: a 404 comes back as a `JobStatus` with `status: "not_found"` so polling can treat it as pending.
 
+`status` is `processing` while the job runs, `not_found` for an unknown job, and otherwise the decision itself: `clear`, `block`, `attention` or `error`. `message` is a human-readable note, "Job completed" on a finished job — the decision is never in the message.
+
 ```ts
 const status = await smile.verifications.retrieve('job_01h8x9y2z3a4b5c6d7e8f9g0h1');
-status.isComplete;   // true when terminal
+status.status;       // e.g. "clear"
+status.isComplete;   // true on any decision, i.e. not processing and not not_found
 status.isProcessing; // true while running
-status.message;      // e.g. "Verification completed with state: clear"
+status.message;      // e.g. "Job completed"
 ```
 
 ### Wait for completion
 
-Polls until the job completes, then returns the final status. Throws `TimeoutError` when the deadline passes. Options: `interval` (default 2000 ms), `timeout` (default 60000 ms), and `treatNotFoundAsPending` (default true).
+Polls while the job is `processing` (and, by default, while it is `not_found`), then returns the status carrying the decision. Throws `TimeoutError` when the deadline passes. Options: `interval` (default 2000 ms), `timeout` (default 60000 ms), and `treatNotFoundAsPending` (default true).
 
 ```ts
 const status = await smile.verifications.waitUntilComplete('job_01h8x9y2z3a4b5c6d7e8f9g0h1', {

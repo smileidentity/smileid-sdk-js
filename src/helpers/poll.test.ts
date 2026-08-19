@@ -10,14 +10,27 @@ import { jsonResponse, routerFetch } from '../testing/mock.js';
 const noSleep = async (): Promise<void> => {};
 
 // Matrix item 7: wait_until_complete.
-test('polls until the job is complete', async () => {
-  const states = ['processing', 'processing', 'complete'];
+test('polls while processing and returns the clear decision', async () => {
+  const states = ['processing', 'processing', 'clear'];
   let i = 0;
   const retrieve = async (): Promise<JobStatus> =>
     new JobStatus({ status: states[i++], jobId: 'job_1' });
   const result = await waitUntilComplete(retrieve, { interval: 1, timeout: 1000 }, noSleep);
   assert.equal(result.isComplete, true);
+  assert.equal(result.status, 'clear');
   assert.equal(i, 3);
+});
+
+// A block decision is just as terminal as a clear one.
+test('polls while processing and returns the block decision', async () => {
+  const states = ['processing', 'block'];
+  let i = 0;
+  const retrieve = async (): Promise<JobStatus> =>
+    new JobStatus({ status: states[i++], jobId: 'job_1' });
+  const result = await waitUntilComplete(retrieve, { interval: 1, timeout: 1000 }, noSleep);
+  assert.equal(result.isComplete, true);
+  assert.equal(result.status, 'block');
+  assert.equal(i, 2);
 });
 
 test('raises TimeoutError once the deadline passes', async () => {
