@@ -50,7 +50,7 @@ Any other host needs an explicit `baseUrl`, which wins over `environment`:
 const smile = new SmileID({
   partnerId: '2',
   apiKey: process.env.SMILE_API_KEY!,
-  baseUrl: process.env.SMILE_BASE_URL ?? 'https://devapi.smileidentity.com',
+  baseUrl: process.env.SMILE_BASE_URL ?? 'https://your-environment.example.com',
 });
 ```
 

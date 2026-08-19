@@ -1,0 +1,45 @@
+name: Live E2E
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    if: github.repository == 'smileidentity/smileid-sdk-js'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm install
+      - name: Build
+        run: npm run build
+      - name: Run live e2e test
+        env:
+          SMILE_PARTNER_ID: ${{ secrets.SMILE_PARTNER_ID }}
+          SMILE_API_KEY: ${{ secrets.SMILE_API_KEY }}
+          SMILE_BASE_URL: ${{ secrets.SMILE_E2E_BASE_URL }}
+        run: |
+          node --test dist/e2e.test.js > e2e-output.txt 2>&1
+          cat e2e-output.txt
+      - name: Fail if the e2e test skipped instead of running
+        run: |
+          if ! grep -qE '^# pass 1$' e2e-output.txt || ! grep -qE '^# skipped 0$' e2e-output.txt; then
+            echo "::error::Live e2e test skipped instead of running — check that SMILE_PARTNER_ID, SMILE_API_KEY and SMILE_E2E_BASE_URL secrets are set on this repository."
+            exit 1
+          fi
