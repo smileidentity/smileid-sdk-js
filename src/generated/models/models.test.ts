@@ -30,3 +30,9 @@ test('JobStatus exposes terminal-state helpers', () => {
   assert.equal(new JobStatus({ status: 'processing' }).isComplete, false);
   assert.equal(new JobStatus({ status: 'not_found' }).isComplete, false);
 });
+
+// A truncated response must not read as a decision and stop the poller.
+test('JobStatus.isComplete is false for a blank or missing status', () => {
+  assert.equal(new JobStatus({ status: '' }).isComplete, false);
+  assert.equal(new JobStatus({ status: undefined as unknown as string }).isComplete, false);
+});

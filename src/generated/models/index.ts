@@ -301,10 +301,11 @@ export class JobStatus {
 
   /**
    * True once the job has reached a terminal decision — any status that is
-   * neither `processing` nor `not_found`.
+   * neither `processing` nor `not_found`. A blank or missing status is not a
+   * decision, so a truncated response never stops the poller.
    */
   get isComplete(): boolean {
-    return !this.isProcessing && !this.isNotFound;
+    return Boolean(this.status) && !this.isProcessing && !this.isNotFound;
   }
   get isProcessing(): boolean {
     return this.status === 'processing';
