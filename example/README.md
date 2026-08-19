@@ -28,13 +28,13 @@ npm install
 ```bash
 export SMILE_PARTNER_ID="2"
 export SMILE_API_KEY="..."
-export SMILE_BASE_URL="https://devapi.smileidentity.com"
+export SMILE_BASE_URL="https://your-environment.example.com"
 export SMILE_CALLBACK_URL="https://your-app.example.com/smile-callback"
 ```
 
 Partner ids are displayed zero-padded (for example 002) but must be passed without leading zeros (2).
 
-`SMILE_BASE_URL` sets the host to call. Leave it unset to use the SDK default, the sandbox at `https://testapi.smileidentity.com`. The only named environments are sandbox and production, so any other host — devapi, for instance — needs this variable or the `--base-url` flag.
+`SMILE_BASE_URL` sets the host to call. Leave it unset to use the SDK default, the sandbox at `https://testapi.smileidentity.com`. The only named environments are sandbox and production, so any other host needs this variable or the `--base-url` flag.
 
 Optional:
 
@@ -47,10 +47,10 @@ Each variable has a matching global flag: `--partner-id`, `--api-key`, `--base-u
 ```bash
 npm run build
 node dist/index.js services --country NG
-node dist/index.js --base-url https://devapi.smileidentity.com services --country NG
+node dist/index.js --base-url https://your-environment.example.com services --country NG
 node dist/index.js enhanced-kyc --country NG --id-type NIN --id-number 12345678901 --given-names "Amina Fatou" --last-name Clearwater --email amina.clearwater@example.com --privacy-url https://your-app.example.com/privacy
 node dist/index.js status --job-id job_...
-node dist/index.js status --job-id job_... --base-url https://devapi.smileidentity.com
+node dist/index.js status --job-id job_... --base-url https://your-environment.example.com
 node dist/index.js replay --job-id job_... --callback-url https://your-app.example.com/smile-callback
 ```
 
