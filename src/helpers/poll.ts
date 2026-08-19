@@ -3,12 +3,16 @@
  *
  * Repeatedly calls the retrieve function until the job completes or the
  * deadline passes. Defaults (interval 2s, timeout 60s) are SDK choices.
+ *
+ * A job is complete once its status is neither `processing` nor `not_found`,
+ * so the helper returns the terminal decision itself (`clear`, `block`,
+ * `attention` or `error`).
  */
 
 import { TimeoutError } from '../errors/index.js';
 import type { JobStatus, WaitOptions } from '../generated/models/index.js';
 
-/** Wait until a job reaches a terminal state, or raise {@link TimeoutError}. */
+/** Wait until a job reaches a terminal decision, or raise {@link TimeoutError}. */
 export async function waitUntilComplete(
   retrieve: () => Promise<JobStatus>,
   opts: WaitOptions = {},

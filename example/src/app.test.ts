@@ -53,11 +53,11 @@ void test('enhanced-kyc submits a verification through the SDK', async () => {
       '--id-number',
       '12345678901',
       '--given-names',
-      'Amina',
+      'Amina Fatou',
       '--last-name',
-      'Okafor',
+      'Clearwater',
       '--email',
-      'amina@example.com',
+      'amina.clearwater@example.com',
     ],
     env: testEnv(),
     stdout: out,
@@ -73,7 +73,8 @@ void test('enhanced-kyc submits a verification through the SDK', async () => {
   assert.match(request.bodyText, /name="country"\r\n\r\nNG/);
   assert.match(request.bodyText, /name="id_type"\r\n\r\nNIN/);
   assert.match(request.bodyText, /name="callback_url"\r\n\r\nhttps:\/\/example.com\/smile-callback/);
-  assert.match(request.bodyText, /"given_names":"Amina"/);
+  assert.match(request.bodyText, /"given_names":"Amina Fatou"/);
+  assert.match(request.bodyText, /"last_name":"Clearwater"/);
 });
 
 void test('status command retrieves a verification', async () => {
@@ -86,8 +87,30 @@ void test('status command retrieves a verification', async () => {
     fetch: fake.fetch,
   });
   const result = JSON.parse(out.text) as { status: string; message: string };
-  assert.equal(result.status, 'complete');
-  assert.equal(result.message, 'clear');
+  assert.equal(result.status, 'clear');
+  assert.equal(result.message, 'Job completed');
+});
+
+// A global flag placed after the command name used to be dropped silently,
+// which sent the request to the default host instead of --base-url.
+void test('global flags are honoured after the command name', async () => {
+  const fake = fakeFetch();
+  const out = new Capture();
+  await run({
+    argv: ['status', '--job-id', 'job_enhanced_123', '--base-url', 'https://api.test'],
+    env: testEnv(),
+    stdout: out,
+    fetch: fake.fetch,
+  });
+  assert.equal((JSON.parse(out.text) as { status: string }).status, 'clear');
+  assert.ok(fake.requests.every((r) => r.url.startsWith('https://api.test/')));
+});
+
+void test('an unknown global flag before the command is a usage error', async () => {
+  await assert.rejects(
+    () => run({ argv: ['--nope', 'x', 'services'], env: testEnv(), stdout: new Capture() }),
+    (error: unknown) => error instanceof UsageError && /unknown global flag --nope/.test(error.message),
+  );
 });
 
 void test('replay command requests callback replay', async () => {
@@ -191,7 +214,7 @@ function fakeFetch(): {
       }
       if (req.url.endsWith('/v3/status/job_enhanced_123')) {
         assert.match(headers['smileid-token'] ?? '', /^eyJ/);
-        return json(200, { status: 'complete', message: 'clear', job_id: 'job_enhanced_123', user_id: 'user_123' });
+        return json(200, { status: 'clear', message: 'Job completed', job_id: 'job_enhanced_123', user_id: 'user_123' });
       }
       if (req.url.endsWith('/v3/replay/job_enhanced_123')) {
         assert.match(headers['smileid-token'] ?? '', /^eyJ/);

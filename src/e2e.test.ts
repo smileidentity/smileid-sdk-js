@@ -10,10 +10,14 @@ import { Consent } from './helpers/consent.js';
  * Submits a sandbox Enhanced KYC job, then polls until it leaves the processing
  * state. It reads SMILE_PARTNER_ID and SMILE_API_KEY from the environment and
  * skips cleanly when either is unset. The credentials are never printed.
+ *
+ * Set SMILE_BASE_URL to point the run at another Smile ID host; without it the
+ * test targets the sandbox.
  */
 
 const partnerId = process.env.SMILE_PARTNER_ID;
 const apiKey = process.env.SMILE_API_KEY;
+const baseUrl = process.env.SMILE_BASE_URL;
 const hasCreds = Boolean(partnerId && apiKey);
 
 test(
@@ -24,10 +28,12 @@ test(
       partnerId: partnerId as string,
       apiKey: apiKey as string,
       environment: 'sandbox',
+      ...(baseUrl ? { baseUrl } : {}),
     });
 
-    // The sandbox only accepts recognized test identities, matched on
-    // given_names + last_name + email.
+    // Non-production environments only accept recognized test identities,
+    // matched on given_names + last_name + email. An identity that is not
+    // recognized resolves to `block`.
     const accepted = await client.enhancedKyc.verify({
       country: 'NG',
       idType: 'NIN',
@@ -51,6 +57,7 @@ test(
       interval: 2000,
       timeout: 60000,
     });
-    assert.ok(['complete', 'processing'].includes(status.status));
+    assert.equal(status.isComplete, true);
+    assert.equal(status.status, 'clear');
   },
 );

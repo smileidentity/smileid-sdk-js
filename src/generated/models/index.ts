@@ -273,7 +273,14 @@ export class AcceptedResponse {
   }
 }
 
-/** Job status from GET /v3/status (spec §5.2, §6.8). */
+/**
+ * Job status from GET /v3/status (spec §5.2, §6.8).
+ *
+ * `status` is `processing` while the job runs, `not_found` for an unknown job,
+ * and otherwise the terminal decision itself: `clear`, `block`, `attention` or
+ * `error`. `message` carries a human-readable note ("Job completed" on a
+ * finished job) and never the decision.
+ */
 export class JobStatus {
   readonly status: string;
   readonly jobId: string | null;
@@ -292,8 +299,13 @@ export class JobStatus {
     this.message = fields.message ?? null;
   }
 
+  /**
+   * True once the job has reached a terminal decision — any status that is
+   * neither `processing` nor `not_found`. A blank or missing status is not a
+   * decision, so a truncated response never stops the poller.
+   */
   get isComplete(): boolean {
-    return this.status === 'complete';
+    return Boolean(this.status) && !this.isProcessing && !this.isNotFound;
   }
   get isProcessing(): boolean {
     return this.status === 'processing';

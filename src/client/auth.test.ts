@@ -75,11 +75,16 @@ test('token fetch retries a transient 503 then succeeds', async () => {
   const { fetch, requests } = recordingFetch([
     jsonResponse(503, { status: 'Service Unavailable', message: 'try again' }),
     jsonResponse(200, { token: makeJwt(exp) }),
-    jsonResponse(200, { status: 'complete', job_id: 'job_1', user_id: 'user_1', message: 'done' }),
+    jsonResponse(200, {
+      status: 'clear',
+      job_id: 'job_1',
+      user_id: 'user_1',
+      message: 'Job completed',
+    }),
   ]);
   const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
   const js = await client.verifications.retrieve('job_01h8x9y2z3a4b5c6d7e8f9g0h1');
-  assert.equal(js.status, 'complete');
+  assert.equal(js.status, 'clear');
   const tokenRequests = requests.filter((r) => r.url.endsWith('/v3/token'));
   assert.equal(tokenRequests.length, 2, 'token endpoint retried once after the 503');
 });
@@ -108,11 +113,16 @@ test('refreshes on a 401 once, then retries the call once', async () => {
     }
     statusCalls += 1;
     if (statusCalls === 1) return jsonResponse(401, { status: 'Unauthorized', message: 'expired' });
-    return jsonResponse(200, { status: 'complete', job_id: 'job_1', user_id: 'user_1', message: 'done' });
+    return jsonResponse(200, {
+      status: 'clear',
+      job_id: 'job_1',
+      user_id: 'user_1',
+      message: 'Job completed',
+    });
   };
   const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
   const js = await client.verifications.retrieve('job_01h8x9y2z3a4b5c6d7e8f9g0h1');
-  assert.equal(js.status, 'complete');
+  assert.equal(js.status, 'clear');
   assert.equal(tokenFetches, 2, 'token refreshed once');
   assert.equal(statusCalls, 2, 'call retried once');
 });

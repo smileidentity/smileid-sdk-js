@@ -21,7 +21,18 @@ test('AcceptedResponse.isAccepted is false for other statuses', () => {
 });
 
 test('JobStatus exposes terminal-state helpers', () => {
-  assert.equal(new JobStatus({ status: 'complete' }).isComplete, true);
   assert.equal(new JobStatus({ status: 'processing' }).isProcessing, true);
   assert.equal(new JobStatus({ status: 'not_found' }).isNotFound, true);
+  // Complete means "not processing and not unknown", so every decision counts.
+  for (const status of ['clear', 'block', 'attention', 'error']) {
+    assert.equal(new JobStatus({ status }).isComplete, true, status);
+  }
+  assert.equal(new JobStatus({ status: 'processing' }).isComplete, false);
+  assert.equal(new JobStatus({ status: 'not_found' }).isComplete, false);
+});
+
+// A truncated response must not read as a decision and stop the poller.
+test('JobStatus.isComplete is false for a blank or missing status', () => {
+  assert.equal(new JobStatus({ status: '' }).isComplete, false);
+  assert.equal(new JobStatus({ status: undefined as unknown as string }).isComplete, false);
 });
