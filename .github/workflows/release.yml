@@ -15,6 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version-file: '.nvmrc'
@@ -45,12 +47,21 @@ jobs:
         run: npm install -g npm@^11.5.1
 
       - name: Publish to npm
-        run: npm publish --access public
+        run: |
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            npm publish --access public --tag next
+          else
+            npm publish --access public
+          fi
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release create "$GITHUB_REF_NAME" --generate-notes --repo "$GITHUB_REPOSITORY"
+            PRERELEASE_FLAG=""
+            if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+              PRERELEASE_FLAG="--prerelease"
+            fi
+            gh release create "$GITHUB_REF_NAME" --generate-notes $PRERELEASE_FLAG --repo "$GITHUB_REPOSITORY"
           fi
