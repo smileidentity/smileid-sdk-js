@@ -48,6 +48,12 @@ jobs:
 
       - name: Publish to npm
         run: |
+          PKG_NAME=$(node -p "require('./package.json').name")
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if npm view "${PKG_NAME}@${PKG_VERSION}" version >/dev/null 2>&1; then
+            echo "${PKG_NAME}@${PKG_VERSION} already exists on the registry — skipping publish."
+            exit 0
+          fi
           if [[ "$GITHUB_REF_NAME" == *-* ]]; then
             npm publish --access public --tag next
           else
