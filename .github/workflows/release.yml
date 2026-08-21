@@ -32,6 +32,14 @@ jobs:
             exit 1
           fi
 
+      - name: Verify CHANGELOG.md has an entry for this version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if ! grep -qF "## [${TAG_VERSION}]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no ## [${TAG_VERSION}] heading for tag ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+
       - run: npm ci
       - name: Build
         run: npm run build
