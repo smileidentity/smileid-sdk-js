@@ -250,13 +250,12 @@ test('enhanced_document_verification: Partner-ID header, id_type part, repeated 
 });
 
 // residency document verification — visa part, PASSPORT id_type, Partner-ID header.
-test('residency_document_verification: visa part, PASSPORT id_type, repeated liveness', async () => {
+test('residency_document_verification: visa part, id_type defaults to PASSPORT, repeated liveness', async () => {
   const { fetch, requests } = routerFetch(() => accepted202('accepted'));
   const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
 
   await client.documents.verifyResidency({
     country: 'ZA',
-    idType: 'PASSPORT',
     selfieImage: FAKE_IMAGE,
     livenessImages: FAKE_LIVENESS,
     document: FAKE_IMAGE,

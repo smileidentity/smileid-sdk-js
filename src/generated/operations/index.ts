@@ -279,7 +279,7 @@ export async function residencyDocumentVerification(
 ): Promise<AcceptedResponse> {
   const parts: MultipartPart[] = [
     ...scalar('country', params.country),
-    ...scalar('id_type', params.idType),
+    ...scalar('id_type', params.idType ?? 'PASSPORT'),
     ...scalar('callback_url', effectiveCallback(params.callbackUrl, opts, transport)),
     await jpegPart('selfie_image', params.selfieImage, 'selfie.jpg'),
     ...(await livenessParts(params.livenessImages)),

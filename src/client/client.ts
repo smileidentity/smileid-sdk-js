@@ -156,9 +156,9 @@ export class SmileID {
       },
       verifyResidency: (params, options) => {
         validateUserDetails(params.userDetails);
-        // The API accepts only PASSPORT and requires the visa image; enforced at
+        // idType defaults to PASSPORT, the only value the API accepts; it also requires the visa image; enforced at
         // runtime for plain-JavaScript callers too.
-        if (params.idType !== 'PASSPORT') {
+        if (params.idType !== undefined && params.idType !== 'PASSPORT') {
           throw new ValidationError({
             message: 'idType must be PASSPORT for residency document verification.',
           });

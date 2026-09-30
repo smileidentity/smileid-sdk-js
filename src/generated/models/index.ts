@@ -125,7 +125,8 @@ export interface ResidencyDocumentVerificationParams extends EntryParamsBase {
   /** The visa page itself (JPEG or PNG), not the passport's biographical page. */
   visa: BinaryInput;
   country: string;
-  idType: 'PASSPORT';
+  /** Optional; defaults to PASSPORT, the only value the API accepts. */
+  idType?: 'PASSPORT';
   /** Sent as the User-ID header. */
   userId?: string;
 }
