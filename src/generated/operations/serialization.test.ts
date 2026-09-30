@@ -249,6 +249,30 @@ test('enhanced_document_verification: Partner-ID header, id_type part, repeated 
   assert.equal(countParts(req.bodyText, 'liveness_images'), 6);
 });
 
+// residency document verification — visa part, PASSPORT id_type, Partner-ID header.
+test('residency_document_verification: visa part, PASSPORT id_type, repeated liveness', async () => {
+  const { fetch, requests } = routerFetch(() => accepted202('accepted'));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  await client.documents.verifyResidency({
+    country: 'ZA',
+    idType: 'PASSPORT',
+    selfieImage: FAKE_IMAGE,
+    livenessImages: FAKE_LIVENESS,
+    document: FAKE_IMAGE,
+    visa: FAKE_IMAGE,
+    userDetails,
+    consent,
+  });
+
+  const req = opRequest(requests);
+  assert.match(req.url, /\/v3\/residency_document_verification$/);
+  assert.equal(req.headers['SmileID-Partner-ID'], '1234');
+  assert.match(req.bodyText, /name="id_type"\r\n\r\nPASSPORT\r\n/);
+  assert.equal(countParts(req.bodyText, 'visa'), 1);
+  assert.equal(countParts(req.bodyText, 'liveness_images'), 6);
+});
+
 // spec §6.4 — biometric KYC: Partner-ID header, id fields, repeated liveness.
 test('biometric_kyc: Partner-ID header and id scalar parts', async () => {
   const { fetch, requests } = routerFetch(() => accepted202('accepted'));
