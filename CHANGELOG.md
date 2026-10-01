@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [12.1.0] - 2026-10-01
+
 ### Added
 
 - Residency document verification: `documents.verifyResidency`. `idType` defaults to `PASSPORT`.
@@ -34,5 +36,6 @@ First public release.
   401.
 - Retry policy for idempotent operations, honouring `Retry-After`.
 
-[unreleased]: https://github.com/smileidentity/smileid-sdk-js/compare/v12.0.0...HEAD
+[unreleased]: https://github.com/smileidentity/smileid-sdk-js/compare/v12.1.0...HEAD
+[12.1.0]: https://github.com/smileidentity/smileid-sdk-js/compare/v12.0.0...v12.1.0
 [12.0.0]: https://github.com/smileidentity/smileid-sdk-js/releases/tag/v12.0.0
