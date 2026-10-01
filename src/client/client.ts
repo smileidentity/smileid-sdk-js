@@ -26,6 +26,7 @@ import type {
   CompareParams,
   DocumentVerificationParams,
   EnhancedDocumentVerificationParams,
+  ResidencyDocumentVerificationParams,
   EnhancedKycParams,
   FlagFraudParams,
   IdStatusParams,
@@ -59,6 +60,10 @@ export class SmileID {
     ): Promise<AcceptedResponse>;
     verifyEnhanced(
       params: EnhancedDocumentVerificationParams,
+      options?: RequestOptions,
+    ): Promise<AcceptedResponse>;
+    verifyResidency(
+      params: ResidencyDocumentVerificationParams,
       options?: RequestOptions,
     ): Promise<AcceptedResponse>;
   };
@@ -148,6 +153,22 @@ export class SmileID {
           });
         }
         return ops.enhancedDocumentVerification(t, params, options);
+      },
+      verifyResidency: (params, options) => {
+        validateUserDetails(params.userDetails);
+        // idType defaults to PASSPORT, the only value the API accepts; it also requires the visa image; enforced at
+        // runtime for plain-JavaScript callers too.
+        if (params.idType !== undefined && params.idType !== 'PASSPORT') {
+          throw new ValidationError({
+            message: 'idType must be PASSPORT for residency document verification.',
+          });
+        }
+        if (!params.visa) {
+          throw new ValidationError({
+            message: 'visa is required for residency document verification.',
+          });
+        }
+        return ops.residencyDocumentVerification(t, params, options);
       },
     };
 

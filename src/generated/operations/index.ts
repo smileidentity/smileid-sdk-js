@@ -23,6 +23,7 @@ import {
   type Consent,
   type DocumentVerificationParams,
   type EnhancedDocumentVerificationParams,
+  type ResidencyDocumentVerificationParams,
   type EnhancedKycParams,
   type IdStatusParams,
   type IdStatusResponse,
@@ -261,6 +262,40 @@ export async function enhancedDocumentVerification(
   const result = await transport.execute({
     method: 'POST',
     path: '/v3/enhanced_document_verification',
+    authenticated: true,
+    needsPartnerIdHeader: true,
+    idempotent: false,
+    headers: { 'User-ID': params.userId },
+    multipart: buildMultipart(parts),
+    ...planExtras(opts),
+  });
+  return toAccepted(result.json);
+}
+
+export async function residencyDocumentVerification(
+  transport: Transport,
+  params: ResidencyDocumentVerificationParams,
+  opts?: RequestOptions,
+): Promise<AcceptedResponse> {
+  const parts: MultipartPart[] = [
+    ...scalar('country', params.country),
+    ...scalar('id_type', params.idType ?? 'PASSPORT'),
+    ...scalar('callback_url', effectiveCallback(params.callbackUrl, opts, transport)),
+    await jpegPart('selfie_image', params.selfieImage, 'selfie.jpg'),
+    ...(await livenessParts(params.livenessImages)),
+    await documentPart('document', params.document, 'document.jpg'),
+    ...(params.documentBack
+      ? [await documentPart('document_back', params.documentBack, 'document_back.jpg')]
+      : []),
+    await documentPart('visa', params.visa, 'visa.jpg'),
+    ...jsonPart('user_details', userDetailsJson(params.userDetails)),
+    ...jsonPart('consent', consentJson(params.consent)),
+    ...optionalJson('partner_params', params.partnerParams),
+    ...optionalJson('metadata', params.metadata),
+  ];
+  const result = await transport.execute({
+    method: 'POST',
+    path: '/v3/residency_document_verification',
     authenticated: true,
     needsPartnerIdHeader: true,
     idempotent: false,

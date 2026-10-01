@@ -113,6 +113,24 @@ export interface EnhancedDocumentVerificationParams extends EntryParamsBase {
   userId?: string;
 }
 
+/**
+ * documents.verifyResidency → POST /v3/residency_document_verification.
+ * Same as §6.3 plus the visa endorsed in the passport; idType must be PASSPORT.
+ */
+export interface ResidencyDocumentVerificationParams extends EntryParamsBase {
+  selfieImage: BinaryInput;
+  livenessImages: BinaryInput[];
+  document: BinaryInput;
+  documentBack?: BinaryInput;
+  /** The visa page itself (JPEG or PNG), not the passport's biographical page. */
+  visa: BinaryInput;
+  country: string;
+  /** Optional; defaults to PASSPORT, the only value the API accepts. */
+  idType?: 'PASSPORT';
+  /** Sent as the User-ID header. */
+  userId?: string;
+}
+
 /** biometricKyc.verify (spec §6.4). */
 export interface BiometricKycParams extends EntryParamsBase {
   selfieImage: BinaryInput;

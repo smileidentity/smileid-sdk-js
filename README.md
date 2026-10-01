@@ -144,6 +144,22 @@ const accepted = await smile.documents.verifyEnhanced({
 });
 ```
 
+### Residency document verification
+
+Verifies a passport and the visa endorsed in it. `idType` is optional and defaults to `PASSPORT`, the only value the API accepts. `visa` is the visa page itself. Results take longer than document verification, so rely on the callback rather than polling. The callback adds an `additional_documents` array with the visa details.
+
+```ts
+const accepted = await smile.documents.verifyResidency({
+  country: 'NG',
+  selfieImage: './selfie.jpg',
+  livenessImages: ['./live1.jpg', './live2.jpg', './live3.jpg', './live4.jpg', './live5.jpg', './live6.jpg'],
+  document: './passport.jpg',
+  visa: './visa.jpg',
+  userDetails,
+  consent,
+});
+```
+
 ### Biometric KYC
 
 ```ts

@@ -32,6 +32,7 @@ export type {
   EnhancedKycParams,
   DocumentVerificationParams,
   EnhancedDocumentVerificationParams,
+  ResidencyDocumentVerificationParams,
   BiometricKycParams,
   RegistrationParams,
   AuthenticationParams,

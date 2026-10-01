@@ -80,6 +80,37 @@ test('validateAuthentication requires images unless useEnrolledImage', () => {
   );
 });
 
+test('documents.verifyResidency rejects a non-PASSPORT idType or missing visa before sending', () => {
+  const fetch = async (): Promise<Response> => {
+    throw new Error('no request should be sent');
+  };
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  const base = {
+    country: 'ZA',
+    idType: 'PASSPORT',
+    selfieImage: FAKE_IMAGE,
+    livenessImages: FAKE_LIVENESS,
+    document: FAKE_IMAGE,
+    visa: FAKE_IMAGE,
+    userDetails: { givenNames: 'John', lastName: 'Doe', email: 'john@example.com' },
+    consent: {
+      granted: true as const,
+      grantedAt: '2026-03-06T12:00:00.000Z',
+      noticeLanguage: 'EN',
+      noticePrivacyPolicyUrl: 'https://example.com/privacy',
+    },
+  };
+  type P = Parameters<typeof client.documents.verifyResidency>[0];
+  assert.throws(
+    () => client.documents.verifyResidency({ ...base, idType: 'NATIONAL_ID' } as unknown as P),
+    ValidationError,
+  );
+  assert.throws(
+    () => client.documents.verifyResidency({ ...base, visa: undefined } as unknown as P),
+    ValidationError,
+  );
+});
+
 // Cross-SDK standard: verifyEnhanced enforces idType client-side (spec §6.3),
 // including for plain-JavaScript callers who bypass the compile-time check.
 test('documents.verifyEnhanced rejects a missing idType before sending', () => {
