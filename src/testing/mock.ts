@@ -18,15 +18,6 @@ export interface RecordedRequest {
   bodyBytes: Buffer | null;
 }
 
-/** Build a JWT with the given `exp` (seconds since epoch). Signature is unused. */
-export function makeJwt(expSeconds: number): string {
-  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString(
-    'base64url',
-  );
-  const payload = Buffer.from(JSON.stringify({ exp: expSeconds })).toString('base64url');
-  return `${header}.${payload}.signature`;
-}
-
 /** Build a JSON Response with a status and optional headers. */
 export function jsonResponse(
   status: number,
@@ -88,16 +79,15 @@ export function recordingFetch(
 }
 
 /**
- * A router fake fetch: token requests always succeed; other requests are served
- * by the provided handler. Useful when a test only cares about the operation.
+ * A router fake fetch: token requests always succeed, each minting a distinct
+ * token; other requests are served by the provided handler. Useful when a test
+ * only cares about the operation.
  */
 export function routerFetch(
   handler: (req: RecordedRequest) => Response,
-  opts: { tokenExp?: number } = {},
 ): { fetch: FetchLike; requests: RecordedRequest[]; tokenCalls: () => number } {
   const requests: RecordedRequest[] = [];
   let tokenCalls = 0;
-  const exp = opts.tokenExp ?? Math.floor(Date.now() / 1000) + 3600;
   const fetch: FetchLike = async (input, init) => {
     const url = typeof input === 'string' ? input : input.toString();
     const bytes = await bodyToBuffer(init);
@@ -111,7 +101,7 @@ export function routerFetch(
     requests.push(req);
     if (url.endsWith('/v3/token')) {
       tokenCalls += 1;
-      return jsonResponse(200, { token: makeJwt(exp) });
+      return jsonResponse(200, { token: `token_${tokenCalls}` });
     }
     return handler(req);
   };

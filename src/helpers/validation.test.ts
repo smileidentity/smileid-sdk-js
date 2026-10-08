@@ -4,10 +4,12 @@ import assert from 'node:assert/strict';
 import { ValidationError } from '../errors/index.js';
 import {
   validateAuthentication,
+  validateBiometricKyc,
   validateReportFraud,
   validateUserDetails,
 } from './validation.js';
 import { SmileID } from '../client/client.js';
+import type { AuthenticationParams } from '../generated/models/index.js';
 import { FAKE_IMAGE, FAKE_LIVENESS } from '../testing/mock.js';
 
 // Matrix item 6: client-side validation.
@@ -62,7 +64,20 @@ test('validateReportFraud requires notes when reason is OTHER', () => {
   );
 });
 
-test('validateAuthentication requires images unless useEnrolledImage', () => {
+const biometricKycBase = {
+  country: 'NG',
+  idType: 'NIN',
+  idNumber: '12345678901',
+  consent: {
+    granted: true as const,
+    grantedAt: '2026-03-06T12:00:00.000Z',
+    noticeLanguage: 'EN',
+    noticePrivacyPolicyUrl: 'https://example.com/privacy',
+  },
+  userDetails: { givenNames: 'John', lastName: 'Doe', email: 'john@example.com' },
+};
+
+test('validateAuthentication always requires images', () => {
   const base = {
     userId: 'user_1',
     consent: {
@@ -73,10 +88,33 @@ test('validateAuthentication requires images unless useEnrolledImage', () => {
     },
     userDetails: { givenNames: 'John', lastName: 'Doe', email: 'john@example.com' },
   };
-  assert.throws(() => validateAuthentication(base), ValidationError);
-  assert.doesNotThrow(() => validateAuthentication({ ...base, useEnrolledImage: true }));
+  assert.throws(
+    () => validateAuthentication(base as unknown as AuthenticationParams),
+    ValidationError,
+  );
   assert.doesNotThrow(() =>
     validateAuthentication({ ...base, selfieImage: FAKE_IMAGE, livenessImages: FAKE_LIVENESS }),
+  );
+});
+
+test('validateBiometricKyc requires images unless useEnrolledImage', () => {
+  assert.throws(() => validateBiometricKyc(biometricKycBase), ValidationError);
+  assert.doesNotThrow(() =>
+    validateBiometricKyc({
+      ...biometricKycBase,
+      selfieImage: FAKE_IMAGE,
+      livenessImages: FAKE_LIVENESS,
+    }),
+  );
+});
+
+test('validateBiometricKyc requires userId when useEnrolledImage is true', () => {
+  assert.throws(
+    () => validateBiometricKyc({ ...biometricKycBase, useEnrolledImage: true }),
+    /userId/,
+  );
+  assert.doesNotThrow(() =>
+    validateBiometricKyc({ ...biometricKycBase, useEnrolledImage: true, userId: 'user_1' }),
   );
 });
 

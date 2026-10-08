@@ -13,6 +13,7 @@ import { ValidationError } from '../errors/index.js';
 import { waitUntilComplete } from '../helpers/poll.js';
 import {
   validateAuthentication,
+  validateBiometricKyc,
   validateReportFraud,
   validateUserDetails,
 } from '../helpers/validation.js';
@@ -175,6 +176,7 @@ export class SmileID {
     this.biometricKyc = {
       verify: (params, options) => {
         validateUserDetails(params.userDetails);
+        validateBiometricKyc(params);
         return ops.biometricKyc(t, params, options);
       },
     };

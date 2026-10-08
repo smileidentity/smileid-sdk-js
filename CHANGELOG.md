@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [12.2.0] - 2026-10-08
+
+### Changed
+
+- Each request mints its own token, bound to that request's `userId` and product, instead of reusing one cached token. A 401 is no longer retried with a refreshed token.
+
+### Added
+
+- `biometricKyc.verify({ useEnrolledImage: true, userId })` verifies against the user's enrolled selfie; the grant is bound into the job's token and the selfie and liveness images may be omitted.
+
+### Removed
+
+- `useEnrolledImage` from `biometric.authenticate`; selfie and liveness images are now always required.
+
 ## [12.1.0] - 2026-10-01
 
 ### Added
@@ -36,6 +50,7 @@ First public release.
   401.
 - Retry policy for idempotent operations, honouring `Retry-After`.
 
-[unreleased]: https://github.com/smileidentity/smileid-sdk-js/compare/v12.1.0...HEAD
+[unreleased]: https://github.com/smileidentity/smileid-sdk-js/compare/v12.2.0...HEAD
+[12.2.0]: https://github.com/smileidentity/smileid-sdk-js/compare/v12.1.0...v12.2.0
 [12.1.0]: https://github.com/smileidentity/smileid-sdk-js/compare/v12.0.0...v12.1.0
 [12.0.0]: https://github.com/smileidentity/smileid-sdk-js/releases/tag/v12.0.0

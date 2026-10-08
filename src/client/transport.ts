@@ -8,9 +8,8 @@
  */
 
 import { ConnectionError, parseError, UnexpectedResponseError } from '../errors/index.js';
-import { TokenManager } from './auth.js';
 import type { ResolvedConfig } from './config.js';
-import type { SerializedMultipart } from '../helpers/multipart.js';
+import { buildMultipart, type MultipartPart, type SerializedMultipart } from '../helpers/multipart.js';
 import { VERSION } from '../version.js';
 
 /** HTTP statuses that are retryable for idempotent operations (spec §2.6). */
@@ -36,6 +35,12 @@ export interface RequestPlan {
   headers?: Record<string, string | undefined>;
   /** Multipart body, when the operation sends one. */
   multipart?: SerializedMultipart;
+  /** Product the request's token is bound to; unset for an unbound token. */
+  product?: string;
+  /** User the request's token is bound to. */
+  tokenUserId?: string;
+  /** Bind the enrolled-image grant into the request's token (never sent in the job body). */
+  useEnrolledImage?: boolean;
   /** When true, a final 404 returns the parsed body instead of raising (spec §6.8). */
   allow404?: boolean;
   /** Per-request options. */
@@ -93,17 +98,11 @@ export function parseRetryAfter(value: string | null): number | null {
 }
 
 export class Transport {
-  readonly tokenManager: TokenManager;
-
   constructor(
     private readonly config: ResolvedConfig,
     private readonly sleep: (ms: number) => Promise<void> = (ms) =>
       new Promise((resolve) => setTimeout(resolve, ms)),
-  ) {
-    this.tokenManager = new TokenManager(config.partnerId, config.apiKey, (plan) =>
-      this.execute(plan),
-    );
-  }
+  ) {}
 
   /** The client-wide default callback URL, or null (spec §2.1). */
   get defaultCallbackUrl(): string | null {
@@ -123,7 +122,7 @@ export class Transport {
   async execute(plan: RequestPlan): Promise<TransportResult> {
     const url = this.buildUrl(plan);
     let attempt = 0;
-    let authRefreshed = false;
+    const token = plan.authenticated ? await this.mintToken(plan) : undefined;
 
     for (;;) {
       if (plan.signal?.aborted) {
@@ -134,9 +133,7 @@ export class Transport {
         if (v !== undefined) headers[k] = v;
       }
       if (plan.needsPartnerIdHeader) headers['SmileID-Partner-ID'] = this.config.partnerId;
-      if (plan.authenticated) {
-        headers['SmileID-Token'] = await this.tokenManager.ensureToken();
-      }
+      if (token !== undefined) headers['SmileID-Token'] = token;
 
       let body: Buffer | string | undefined;
       if (plan.multipart) {
@@ -194,13 +191,6 @@ export class Transport {
         return { statusCode: resp.status, json, rawBody, requestId };
       }
 
-      // Refresh-on-401 once, then surface AuthenticationError (spec §2.3 item 5).
-      if (resp.status === 401 && plan.authenticated && !authRefreshed) {
-        this.tokenManager.invalidate();
-        authRefreshed = true;
-        continue;
-      }
-
       if (plan.allow404 && resp.status === 404) {
         return { statusCode: resp.status, json: safeJson(rawBody), rawBody, requestId };
       }
@@ -214,6 +204,43 @@ export class Transport {
 
       throw parseError({ statusCode: resp.status, rawBody, requestId });
     }
+  }
+
+  /**
+   * Mint a token bound to this one request's user, product and grant. Tokens
+   * are never shared: a grant authorises a captureless job for one user and
+   * must not reach any other call.
+   */
+  private async mintToken(plan: RequestPlan): Promise<string> {
+    const parts: MultipartPart[] = [];
+    const claim = (name: string, value: string | undefined): void => {
+      if (value !== undefined) parts.push({ kind: 'scalar', name, value });
+    };
+    claim('user_id', plan.tokenUserId);
+    claim('product', plan.product);
+    if (plan.useEnrolledImage) claim('use_enrolled_image', 'true');
+    // The token endpoint documents lowercase header names; send them verbatim.
+    const result = await this.execute({
+      method: 'POST',
+      path: '/v3/token',
+      authenticated: false,
+      needsPartnerIdHeader: false,
+      idempotent: true,
+      headers: {
+        'smileid-partner-id': this.config.partnerId,
+        'smileid-api-key': this.config.apiKey,
+      },
+      ...(parts.length > 0 ? { multipart: buildMultipart(parts) } : {}),
+    });
+    const token = (result.json as { token?: string } | null)?.token;
+    if (!token) {
+      throw parseError({
+        statusCode: result.statusCode,
+        rawBody: result.rawBody,
+        requestId: result.requestId,
+      });
+    }
+    return token;
   }
 
   private buildUrl(plan: RequestPlan): string {

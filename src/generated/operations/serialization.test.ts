@@ -62,11 +62,11 @@ test('enhanced_kyc: scalar + JSON parts, User-ID header, no Partner-ID header', 
   assert.equal(req.headers['SmileID-Partner-ID'], undefined, 'no Partner-ID header for enhanced_kyc');
   assert.ok(req.headers['SmileID-Token'], 'token attached');
   assert.equal(req.headers['SmileID-Source-SDK'], 'node');
-  assert.equal(req.headers['SmileID-Source-SDK-Version'], '12.1.0');
+  assert.equal(req.headers['SmileID-Source-SDK-Version'], '12.2.0');
   // Cross-SDK format: smileid-sdk-node/<version> (node/<runtime version, no leading v>).
   assert.match(
     req.headers['User-Agent'],
-    /^smileid-sdk-node\/12\.1\.0 \(node\/\d+\.\d+\.\d+[^)]*\)$/,
+    /^smileid-sdk-node\/12\.2\.0 \(node\/\d+\.\d+\.\d+[^)]*\)$/,
   );
   assert.match(req.headers['Content-Type'], /^multipart\/form-data; boundary=/);
 
@@ -294,6 +294,27 @@ test('biometric_kyc: Partner-ID header and id scalar parts', async () => {
   assert.equal(req.headers['User-ID'], 'user_1');
   assert.match(req.bodyText, /name="id_number"\r\n\r\n12345678901\r\n/);
   assert.equal(countParts(req.bodyText, 'liveness_images'), 6);
+});
+
+// spec §6.4 — useEnrolledImage makes the images optional and never reaches the body.
+test('biometric_kyc: useEnrolledImage sends no images and no use_enrolled_image part', async () => {
+  const { fetch, requests } = routerFetch(() => accepted202('accepted'));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  await client.biometricKyc.verify({
+    country: 'NG',
+    idType: 'NIN',
+    idNumber: '12345678901',
+    useEnrolledImage: true,
+    userDetails,
+    consent,
+    userId: 'user_1',
+  });
+
+  const req = opRequest(requests);
+  assert.equal(countParts(req.bodyText, 'selfie_image'), 0);
+  assert.equal(countParts(req.bodyText, 'liveness_images'), 0);
+  assert.equal(countParts(req.bodyText, 'use_enrolled_image'), 0);
 });
 
 // spec §6.5 — registration: no Partner-ID header, boolean scalar as "true".

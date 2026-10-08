@@ -20,7 +20,7 @@ npm install @smileid/usesmileid-nodejs
 
 ## Create a client
 
-Construct a client with your partner id and API key. The SDK handles authentication for you: it fetches an internal token, caches it until just before expiry, and refreshes it once on a 401. You never handle tokens yourself.
+Construct a client with your partner id and API key. The SDK handles authentication for you: before each request it fetches a short-lived internal token, bound to that request's user and product. You never handle tokens yourself.
 
 ```ts
 import { SmileID } from '@smileid/usesmileid-nodejs';
@@ -174,6 +174,20 @@ const accepted = await smile.biometricKyc.verify({
 });
 ```
 
+To verify against a user's enrolled selfie instead of a fresh capture, set `useEnrolledImage` and pass the enrolled `userId`; the selfie and liveness images may then be omitted.
+
+```ts
+const accepted = await smile.biometricKyc.verify({
+  useEnrolledImage: true,
+  userId: 'user_01h8x9y2z3a4b5c6d7e8f9g0h1',
+  country: 'NG',
+  idType: 'NIN',
+  idNumber: '12345678901',
+  userDetails,
+  consent,
+});
+```
+
 ### Biometric enrollment
 
 ```ts
@@ -188,7 +202,7 @@ const accepted = await smile.biometric.enroll({
 
 ### Biometric authentication
 
-`userId` is required and must match an enrolled user. Images are required unless `useEnrolledImage` is true.
+Authenticates a previously enrolled user against a fresh selfie and liveness capture. `userId` is required and must match an enrolled user.
 
 ```ts
 const accepted = await smile.biometric.authenticate({
@@ -312,7 +326,7 @@ Every failure throws a subclass of `SmileIDError`. Each error carries `statusCod
 | ---------------------- | ---------------------------------------------------------- |
 | `InvalidRequestError`  | 400 or 415                                                 |
 | `ValidationError`      | Client-side validation, before any request is sent         |
-| `AuthenticationError`  | 401 after one token refresh has already been tried         |
+| `AuthenticationError`  | 401                                                        |
 | `PaymentRequiredError` | 402, insufficient wallet balance                           |
 | `PermissionError`      | 403                                                        |
 | `NotFoundError`        | 404 (not thrown by `verifications.retrieve`)               |
