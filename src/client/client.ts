@@ -8,11 +8,13 @@
 
 import { resolveConfig, type SmileIDConfig } from './config.js';
 import { Transport } from './transport.js';
+import type { BiometricKycParams } from './params.js';
 import * as ops from '../generated/operations/index.js';
 import { ValidationError } from '../errors/index.js';
 import { waitUntilComplete } from '../helpers/poll.js';
 import {
   validateAuthentication,
+  validateBiometricKyc,
   validateReportFraud,
   validateUserDetails,
 } from '../helpers/validation.js';
@@ -21,7 +23,6 @@ import type {
   AuthenticationParams,
   BankCodesParams,
   BankCodesResponse,
-  BiometricKycParams,
   ClearFraudParams,
   CompareParams,
   DocumentVerificationParams,
@@ -175,7 +176,12 @@ export class SmileID {
     this.biometricKyc = {
       verify: (params, options) => {
         validateUserDetails(params.userDetails);
-        return ops.biometricKyc(t, params, options);
+        validateBiometricKyc(params);
+        return ops.biometricKyc(
+          params.useEnrolledImage === true ? t.withEnrolledImageGrant() : t,
+          params,
+          options,
+        );
       },
     };
 

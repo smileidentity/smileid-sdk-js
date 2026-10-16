@@ -11,6 +11,7 @@ export { VERSION } from './version.js';
 // Client + configuration.
 export { SmileID } from './client/client.js';
 export type { SmileIDConfig, FetchLike } from './client/config.js';
+export type { BiometricKycParams } from './client/params.js';
 
 // Builders.
 export { Consent } from './helpers/consent.js';
@@ -33,7 +34,6 @@ export type {
   DocumentVerificationParams,
   EnhancedDocumentVerificationParams,
   ResidencyDocumentVerificationParams,
-  BiometricKycParams,
   RegistrationParams,
   AuthenticationParams,
   CompareParams,

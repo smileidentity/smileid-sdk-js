@@ -317,8 +317,10 @@ export async function biometricKyc(
     ...scalar('id_number', params.idNumber),
     ...scalar('sandbox_result', params.sandboxResult),
     ...scalar('callback_url', effectiveCallback(params.callbackUrl, opts, transport)),
-    await jpegPart('selfie_image', params.selfieImage, 'selfie.jpg'),
-    ...(await livenessParts(params.livenessImages)),
+    ...(params.selfieImage
+      ? [await jpegPart('selfie_image', params.selfieImage, 'selfie.jpg')]
+      : []),
+    ...(params.livenessImages ? await livenessParts(params.livenessImages) : []),
     ...jsonPart('user_details', userDetailsJson(params.userDetails)),
     ...jsonPart('consent', consentJson(params.consent)),
     ...optionalJson('partner_params', params.partnerParams),
@@ -374,13 +376,10 @@ export async function authentication(
   // user_id is a body field here (required), not the User-ID header (spec §6.6).
   const parts: MultipartPart[] = [
     ...scalar('user_id', params.userId),
-    ...scalar('use_enrolled_image', params.useEnrolledImage),
     ...scalar('sandbox_result', params.sandboxResult),
     ...scalar('callback_url', effectiveCallback(params.callbackUrl, opts, transport)),
-    ...(params.selfieImage
-      ? [await jpegPart('selfie_image', params.selfieImage, 'selfie.jpg')]
-      : []),
-    ...(params.livenessImages ? await livenessParts(params.livenessImages) : []),
+    await jpegPart('selfie_image', params.selfieImage, 'selfie.jpg'),
+    ...(await livenessParts(params.livenessImages)),
     ...jsonPart('user_details', userDetailsJson(params.userDetails)),
     ...jsonPart('consent', consentJson(params.consent)),
     ...optionalJson('partner_params', params.partnerParams),
