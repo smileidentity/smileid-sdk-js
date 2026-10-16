@@ -6,9 +6,9 @@
  */
 
 import { ValidationError } from '../errors/index.js';
+import type { BiometricKycParams } from '../client/params.js';
 import type {
   AuthenticationParams,
-  BiometricKycParams,
   ReportFraudParams,
   UserDetails,
 } from '../generated/models/index.js';
@@ -98,6 +98,9 @@ export function validateAuthentication(params: AuthenticationParams): void {
  * images optional; otherwise selfieImage and livenessImages are required.
  */
 export function validateBiometricKyc(params: BiometricKycParams): void {
+  if (params.useEnrolledImage !== undefined && typeof params.useEnrolledImage !== 'boolean') {
+    throw new ValidationError({ message: 'useEnrolledImage must be a boolean.' });
+  }
   if (params.useEnrolledImage === true) {
     if (!params.userId) {
       throw new ValidationError({

@@ -20,7 +20,7 @@ npm install @smileid/usesmileid-nodejs
 
 ## Create a client
 
-Construct a client with your partner id and API key. The SDK handles authentication for you: before each request it fetches a short-lived internal token, bound to that request's user and product. You never handle tokens yourself.
+Construct a client with your partner id and API key. The SDK handles authentication for you: before each request it fetches a short-lived internal token. A verification job's token is bound to that job's product and, when the job names one, its user; other calls get a token with neither. You never handle tokens yourself.
 
 ```ts
 import { SmileID } from '@smileid/usesmileid-nodejs';

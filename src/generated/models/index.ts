@@ -133,15 +133,10 @@ export interface ResidencyDocumentVerificationParams extends EntryParamsBase {
 
 /** biometricKyc.verify (spec §6.4). */
 export interface BiometricKycParams extends EntryParamsBase {
-  /** Required unless useEnrolledImage is true. */
+  /** Required unless the enrolled-image grant is used. */
   selfieImage?: BinaryInput;
-  /** Required unless useEnrolledImage is true. */
+  /** Required unless the enrolled-image grant is used. */
   livenessImages?: BinaryInput[];
-  /**
-   * Verify against the user's enrolled selfie. Requires userId. Granted through the
-   * job's token, never sent in the job body.
-   */
-  useEnrolledImage?: boolean;
   country: string;
   idType: string;
   idNumber: string;

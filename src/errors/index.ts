@@ -45,7 +45,7 @@ export class SmileIDError extends Error {
 
 /** 400 / 415 — malformed or unsupported request. Also used for local validation. */
 export class InvalidRequestError extends SmileIDError {}
-/** 401 — authentication failed (raised after a failed token refresh). */
+/** 401 — authentication failed. */
 export class AuthenticationError extends SmileIDError {}
 /** 402 — insufficient wallet balance. */
 export class PaymentRequiredError extends SmileIDError {}
