@@ -6,6 +6,7 @@
  */
 
 import { ValidationError } from '../errors/index.js';
+import type { BiometricKycParams } from '../client/params.js';
 import type {
   AuthenticationParams,
   ReportFraudParams,
@@ -77,19 +78,40 @@ export function validateReportFraud(params: ReportFraudParams): void {
   }
 }
 
-/**
- * authentication image rule (spec §6.6): unless useEnrolledImage is true,
- * selfieImage and livenessImages are both required.
- */
-export function validateAuthentication(params: AuthenticationParams): void {
-  if (params.useEnrolledImage === true) return;
+function hasImages(params: { selfieImage?: unknown; livenessImages?: unknown }): boolean {
   const hasSelfie = params.selfieImage !== undefined && params.selfieImage !== null;
-  const hasLiveness =
-    Array.isArray(params.livenessImages) && params.livenessImages.length > 0;
-  if (!hasSelfie || !hasLiveness) {
+  const hasLiveness = Array.isArray(params.livenessImages) && params.livenessImages.length > 0;
+  return hasSelfie && hasLiveness;
+}
+
+/** authentication always requires selfieImage and livenessImages (spec §6.6). */
+export function validateAuthentication(params: AuthenticationParams): void {
+  if (!hasImages(params)) {
     throw new ValidationError({
-      message:
-        'selfieImage and livenessImages are required unless useEnrolledImage is true.',
+      message: 'selfieImage and livenessImages are required.',
+    });
+  }
+}
+
+/**
+ * biometric KYC (spec §6.4): useEnrolledImage requires userId and makes the
+ * images optional; otherwise selfieImage and livenessImages are required.
+ */
+export function validateBiometricKyc(params: BiometricKycParams): void {
+  if (params.useEnrolledImage !== undefined && typeof params.useEnrolledImage !== 'boolean') {
+    throw new ValidationError({ message: 'useEnrolledImage must be a boolean.' });
+  }
+  if (params.useEnrolledImage === true) {
+    if (!params.userId) {
+      throw new ValidationError({
+        message: 'userId is required when useEnrolledImage is true.',
+      });
+    }
+    return;
+  }
+  if (!hasImages(params)) {
+    throw new ValidationError({
+      message: 'selfieImage and livenessImages are required unless useEnrolledImage is true.',
     });
   }
 }

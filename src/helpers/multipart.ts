@@ -46,6 +46,8 @@ export type MultipartPart = ScalarPart | JsonPart | BinaryPart;
 export interface SerializedMultipart {
   body: Buffer;
   contentType: string;
+  /** The scalar text parts, in order, as [name, value] pairs. */
+  textParts: [string, string][];
 }
 
 const CRLF = '\r\n';
@@ -97,5 +99,8 @@ export function buildMultipart(parts: MultipartPart[]): SerializedMultipart {
   return {
     body: Buffer.concat(segments),
     contentType: `multipart/form-data; boundary=${boundary}`,
+    textParts: parts.flatMap((p): [string, string][] =>
+      p.kind === 'scalar' ? [[p.name, p.value]] : [],
+    ),
   };
 }
