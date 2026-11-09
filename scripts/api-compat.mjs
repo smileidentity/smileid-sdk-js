@@ -33,13 +33,14 @@ export function apiEntries(report) {
     if (line === '' || line.startsWith('//')) continue;
     // A string constant's value (such as VERSION) is not part of its contract.
     line = line.replace(/^(export )?(declare )?const (\w+) = "[^"]*";$/, '$1const $3: string;');
-    if (line.startsWith('}')) {
-      entries.add(`${scope.join(' > ')} :: ${line}`);
-      scope.pop();
-      continue;
-    }
     entries.add(`${scope.join(' > ')} :: ${line}`);
-    if (line.endsWith('{')) scope.push(line.slice(0, -1).trim());
+    const closed = line.startsWith('}') ? scope.pop() : undefined;
+    if (line.endsWith('{')) {
+      const opened = line.slice(0, -1).trim();
+      // A line such as "} | {" closes one branch of a declaration and opens
+      // the next; key the new branch under the same declaration.
+      scope.push(closed === undefined ? opened : `${closed} ${opened}`);
+    }
   }
   return entries;
 }
@@ -49,18 +50,34 @@ export function removed(before, after) {
   return [...before].filter((e) => !after.has(e)).sort();
 }
 
+/**
+ * Compare report texts. `introduced` are breaks the head has and the base
+ * does not; `inherited` are breaks the base branch already has.
+ */
+export function compareReports(releaseReport, headReport, baseReport) {
+  const release = apiEntries(releaseReport);
+  const headBreaks = removed(release, apiEntries(headReport));
+  const onBase = new Set(
+    baseReport === undefined ? [] : removed(release, apiEntries(baseReport)),
+  );
+  return {
+    introduced: headBreaks.filter((b) => !onBase.has(b)),
+    inherited: headBreaks.filter((b) => onBase.has(b)),
+  };
+}
+
 function main(argv) {
   const [releasePath, headPath, basePath] = argv;
   if (!releasePath || !headPath) {
     console.error('usage: node scripts/api-compat.mjs <release.api.md> <head.api.md> [<base.api.md>]');
     process.exit(2);
   }
-  const read = (p) => apiEntries(readFileSync(p, 'utf8'));
-  const release = read(releasePath);
-  const headBreaks = removed(release, read(headPath));
-  const inherited = new Set(basePath ? removed(release, read(basePath)) : []);
-  const introduced = headBreaks.filter((b) => !inherited.has(b));
-  const stillInherited = headBreaks.filter((b) => inherited.has(b));
+  const read = (p) => readFileSync(p, 'utf8');
+  const { introduced, inherited: stillInherited } = compareReports(
+    read(releasePath),
+    read(headPath),
+    basePath ? read(basePath) : undefined,
+  );
 
   if (stillInherited.length > 0) {
     console.log(
