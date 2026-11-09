@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { SmileID } from '../../client/client.js';
 import { Consent } from '../../helpers/consent.js';
+import { VERSION } from '../../version.js';
 import {
   FAKE_IMAGE,
   FAKE_LIVENESS,
@@ -11,6 +12,8 @@ import {
   type RecordedRequest,
 } from '../../testing/mock.js';
 import type { UserDetails } from '../models/index.js';
+import type { Transport } from '../../client/transport.js';
+import { enhancedKyc as enhancedKycOp } from './index.js';
 
 const consent = Consent.granted({
   grantedAt: '2026-03-06T12:00:00.000Z',
@@ -62,11 +65,11 @@ test('enhanced_kyc: scalar + JSON parts, User-ID header, no Partner-ID header', 
   assert.equal(req.headers['SmileID-Partner-ID'], undefined, 'no Partner-ID header for enhanced_kyc');
   assert.ok(req.headers['SmileID-Token'], 'token attached');
   assert.equal(req.headers['SmileID-Source-SDK'], 'node');
-  assert.equal(req.headers['SmileID-Source-SDK-Version'], '12.2.0');
+  assert.equal(req.headers['SmileID-Source-SDK-Version'], VERSION);
   // Cross-SDK format: smileid-sdk-node/<version> (node/<runtime version, no leading v>).
   assert.match(
     req.headers['User-Agent'],
-    /^smileid-sdk-node\/12\.2\.0 \(node\/\d+\.\d+\.\d+[^)]*\)$/,
+    new RegExp(`^smileid-sdk-node/${VERSION.replace(/\./g, '\\.')} \\(node/\\d+\\.\\d+\\.\\d+[^)]*\\)$`),
   );
   assert.match(req.headers['Content-Type'], /^multipart\/form-data; boundary=/);
 
@@ -481,4 +484,150 @@ test('selfie_image is always image/jpeg even when the input claims otherwise', a
     !/name="(selfie_image|liveness_images)"[^\r]*\r\nContent-Type: image\/png/.test(req.bodyText),
     'no selfie or liveness part is PNG',
   );
+});
+
+// Optional JSON parts: partner_params and metadata are sent as JSON parts when given.
+test('enhanced_kyc: partner_params and metadata are JSON parts when provided', async () => {
+  const { fetch, requests } = routerFetch(() => accepted202('Accepted'));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  await client.enhancedKyc.verify({
+    country: 'NG',
+    idType: 'NIN',
+    idNumber: '12345678901',
+    userDetails,
+    consent,
+    partnerParams: { job_ref: 'abc' },
+    metadata: [{ name: 'channel', value: 'web' }],
+  });
+
+  const body = opRequest(requests).bodyText;
+  assert.match(
+    body,
+    /name="partner_params"\r\nContent-Type: application\/json\r\n\r\n\{"job_ref":"abc"\}\r\n/,
+  );
+  assert.match(
+    body,
+    /name="metadata"\r\nContent-Type: application\/json\r\n\r\n\[\{"name":"channel","value":"web"\}\]\r\n/,
+  );
+});
+
+// document_back is an optional binary part on every document operation.
+test('document operations send a document_back part only when given', async () => {
+  const back = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
+  const { fetch, requests } = routerFetch(() => accepted202('accepted'));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  const base = {
+    country: 'NG',
+    selfieImage: FAKE_IMAGE,
+    livenessImages: FAKE_LIVENESS,
+    document: FAKE_IMAGE,
+    documentBack: back,
+    userDetails,
+    consent,
+  };
+
+  await client.documents.verify(base);
+  await client.documents.verifyEnhanced({ ...base, idType: 'PASSPORT' });
+  await client.documents.verifyResidency({ ...base, visa: FAKE_IMAGE });
+
+  const ops = requests.filter((r) => !r.url.endsWith('/v3/token'));
+  assert.equal(ops.length, 3);
+  for (const req of ops) {
+    assert.equal(countParts(req.bodyText, 'document_back'), 1, req.url);
+    assert.match(
+      req.bodyText,
+      /name="document_back"; filename="document_back.jpg"\r\nContent-Type: image\/png/,
+    );
+  }
+});
+
+test('compare: optional liveness_images are sent as repeated parts', async () => {
+  const { fetch, requests } = routerFetch(() => accepted202('Accepted'));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  await client.biometric.compare({
+    selfieImage: FAKE_IMAGE,
+    comparisonImage: FAKE_IMAGE,
+    comparisonImageType: 'ID_PHOTO',
+    livenessImages: FAKE_LIVENESS,
+    userDetails,
+    consent,
+  });
+
+  const body = opRequest(requests).bodyText;
+  assert.equal(countParts(body, 'liveness_images'), 6);
+  assert.equal(countParts(body, 'user_id'), 0, 'no user_id part when none is given');
+});
+
+// Response mapping: every field is read defensively from the wire.
+test('accepted response maps created_at when present', async () => {
+  const { fetch } = routerFetch(() =>
+    jsonResponse(202, {
+      status: 'Accepted',
+      message: 'queued',
+      job_id: 'job_1',
+      user_id: 'user_1',
+      created_at: '2026-03-06T12:00:00Z',
+    }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const accepted = await client.enhancedKyc.verify({
+    country: 'NG',
+    idType: 'NIN',
+    idNumber: '1',
+    userDetails,
+    consent,
+  });
+  assert.equal(accepted.createdAt, '2026-03-06T12:00:00Z');
+});
+
+test('accepted response with missing or mistyped fields falls back to defaults', async () => {
+  const { fetch } = routerFetch(() =>
+    jsonResponse(202, { status: 7, message: null, job_id: 1, user_id: false }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const accepted = await client.enhancedKyc.verify({
+    country: 'NG',
+    idType: 'NIN',
+    idNumber: '1',
+    userDetails,
+    consent,
+  });
+  assert.equal(accepted.status, '');
+  assert.equal(accepted.message, '');
+  assert.equal(accepted.jobId, null);
+  assert.equal(accepted.userId, null);
+  assert.equal(accepted.createdAt, null);
+});
+
+test('accepted response from a transport that returns no JSON maps to defaults', async () => {
+  const transport = {
+    defaultCallbackUrl: null,
+    execute: async () => ({ statusCode: 202, json: null, rawBody: '', requestId: null }),
+  } as unknown as Transport;
+
+  const accepted = await enhancedKycOp(transport, {
+    country: 'NG',
+    idType: 'NIN',
+    idNumber: '1',
+    userDetails,
+    consent,
+  });
+  assert.equal(accepted.status, '');
+  assert.equal(accepted.message, '');
+  assert.equal(accepted.jobId, null);
+});
+
+test('status: a 404 with an empty body maps to an empty JobStatus', async () => {
+  const { fetch } = routerFetch(() => new Response('', { status: 404 }));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const js = await client.verifications.retrieve('job_missing');
+  assert.equal(js.status, '');
+  assert.equal(js.jobId, null);
+  assert.equal(js.userId, null);
+  assert.equal(js.message, null);
 });
