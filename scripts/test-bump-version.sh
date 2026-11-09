@@ -142,6 +142,28 @@ run "$dir" patch
 [ "$status" != 0 ] || fail "missing unreleased link: expected failure"
 case "$out" in *"[unreleased]"*) ;; *) fail "missing unreleased link: unexpected message: $out" ;; esac
 
+# --- a failure while writing leaves every file unchanged --------------------
+dir="$work/atomic"
+fixture "$dir"
+shim="$work/shim"
+mkdir -p "$shim"
+real_node="$(command -v node)"
+# A node that answers -p queries but fails when asked to write the JSON files.
+cat >"$shim/node" <<EOF
+#!/usr/bin/env bash
+if [ "\$1" = "-e" ]; then echo "simulated write failure" >&2; exit 1; fi
+exec "$real_node" "\$@"
+EOF
+chmod +x "$shim/node"
+before="$(cd "$dir" && cat package.json package-lock.json CHANGELOG.md src/version.ts)"
+set +e
+out="$(cd "$dir" && PATH="$shim:$PATH" BUMP_DATE=2026-11-09 bash "$script" minor 2>&1)"
+status=$?
+set -e
+[ "$status" != 0 ] || fail "atomic: expected failure, got success: $out"
+after="$(cd "$dir" && cat package.json package-lock.json CHANGELOG.md src/version.ts)"
+[ "$before" = "$after" ] || fail "atomic: files changed after a failed write"
+
 if [ "$failures" -ne 0 ]; then
   echo "$failures bump-version test(s) failed" >&2
   exit 1

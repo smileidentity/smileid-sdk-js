@@ -81,8 +81,10 @@ repo_url="${BASH_REMATCH[1]}"
 
 # ---- write -----------------------------------------------------------------
 
-tmp="$(mktemp)"
-trap 'rm -f "$tmp"' EXIT
+# Write every new file to a temporary directory first, then copy them all into
+# place, so a failure part-way leaves the repository unchanged.
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
 
 awk -v next_ver="$next" -v today="$today" -v repo="$repo_url" -v cur="$current" '
   $0 == "## [Unreleased]" {
@@ -98,22 +100,29 @@ awk -v next_ver="$next" -v today="$today" -v repo="$repo_url" -v cur="$current" 
     next
   }
   { print }
-' CHANGELOG.md >"$tmp"
-cat "$tmp" >CHANGELOG.md
+' CHANGELOG.md >"$tmp/CHANGELOG.md"
 
-NEXT_VERSION="$next" node -e '
+NEXT_VERSION="$next" OUT="$tmp" node -e '
   const fs = require("fs");
+  const path = require("path");
   const next = process.env.NEXT_VERSION;
+  const out = process.env.OUT;
   const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
   pkg.version = next;
-  fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
+  fs.writeFileSync(path.join(out, "package.json"), JSON.stringify(pkg, null, 2) + "\n");
   const lock = JSON.parse(fs.readFileSync("package-lock.json", "utf8"));
   lock.version = next;
   if (lock.packages && lock.packages[""]) lock.packages[""].version = next;
-  fs.writeFileSync("package-lock.json", JSON.stringify(lock, null, 2) + "\n");
+  fs.writeFileSync(path.join(out, "package-lock.json"), JSON.stringify(lock, null, 2) + "\n");
 '
 
-sed "s/^export const VERSION = '${current//./\\.}';\$/export const VERSION = '${next}';/" src/version.ts >"$tmp"
-cat "$tmp" >src/version.ts
+sed "s/^export const VERSION = '${current//./\\.}';\$/export const VERSION = '${next}';/" src/version.ts >"$tmp/version.ts"
+grep -qxF "export const VERSION = '${next}';" "$tmp/version.ts" || die "could not update src/version.ts"
+
+# cp (not mv) keeps each file's existing permissions.
+cp "$tmp/package.json" package.json
+cp "$tmp/package-lock.json" package-lock.json
+cp "$tmp/version.ts" src/version.ts
+cp "$tmp/CHANGELOG.md" CHANGELOG.md
 
 echo "$next"
