@@ -7,20 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [12.2.0] - 2026-10-08
+## [13.0.0] - 2026-11-09
+
+This release breaks the 12.x API, so it is a major version. 12.2.0 was never published.
+
+### Breaking changes
+
+- `biometric.authenticate` no longer accepts `useEnrolledImage`. Always send `selfieImage` and `livenessImages`, or use `biometricKyc.verify({ useEnrolledImage: true, userId })` to verify against the enrolled selfie.
+- A 401 response is no longer retried with a refreshed token. Handle `AuthenticationError` in your code instead of relying on a retry.
+- An empty `userId`, or one with leading or trailing spaces, now raises `ValidationError` before the request is sent. Trim the value and check it is not empty before you call the SDK.
 
 ### Changed
 
-- Each request mints its own token, bound to that request's `userId` and product, instead of reusing one cached token. A 401 is no longer retried with a refreshed token.
-- A `userId` that is empty or padded with whitespace raises `ValidationError` before any request is sent.
+- Each request mints its own token, bound to that request's `userId` and product, instead of reusing one cached token.
 
 ### Added
 
 - `biometricKyc.verify({ useEnrolledImage: true, userId })` verifies against the user's enrolled selfie; the grant is bound into the job's token and the selfie and liveness images may be omitted.
-
-### Removed
-
-- `useEnrolledImage` from `biometric.authenticate`; selfie and liveness images are now always required.
 
 ## [12.1.0] - 2026-10-01
 
@@ -51,7 +54,7 @@ First public release.
   401.
 - Retry policy for idempotent operations, honouring `Retry-After`.
 
-[unreleased]: https://github.com/smileidentity/smileid-sdk-js/compare/v12.2.0...HEAD
-[12.2.0]: https://github.com/smileidentity/smileid-sdk-js/compare/v12.1.0...v12.2.0
+[unreleased]: https://github.com/smileidentity/smileid-sdk-js/compare/v13.0.0...HEAD
+[13.0.0]: https://github.com/smileidentity/smileid-sdk-js/compare/v12.1.0...v13.0.0
 [12.1.0]: https://github.com/smileidentity/smileid-sdk-js/compare/v12.0.0...v12.1.0
 [12.0.0]: https://github.com/smileidentity/smileid-sdk-js/releases/tag/v12.0.0
