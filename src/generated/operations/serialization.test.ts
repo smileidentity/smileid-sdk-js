@@ -30,6 +30,11 @@ const accepted202 = (status: string): Response =>
     user_id: 'user_01h8x9y2z3a4b5c6d7e8f9g0h1',
   });
 
+/** Escape every RegExp metacharacter in `s`. */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /** The single non-token request captured by the router. */
 function opRequest(requests: RecordedRequest[]): RecordedRequest {
   const req = requests.find((r) => !r.url.endsWith('/v3/token'));
@@ -69,7 +74,7 @@ test('enhanced_kyc: scalar + JSON parts, User-ID header, no Partner-ID header', 
   // Cross-SDK format: smileid-sdk-node/<version> (node/<runtime version, no leading v>).
   assert.match(
     req.headers['User-Agent'],
-    new RegExp(`^smileid-sdk-node/${VERSION.replace(/\./g, '\\.')} \\(node/\\d+\\.\\d+\\.\\d+[^)]*\\)$`),
+    new RegExp(`^smileid-sdk-node/${escapeRegExp(VERSION)} \\(node/\\d+\\.\\d+\\.\\d+[^)]*\\)$`),
   );
   assert.match(req.headers['Content-Type'], /^multipart\/form-data; boundary=/);
 
