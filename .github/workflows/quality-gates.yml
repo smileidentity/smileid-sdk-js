@@ -118,4 +118,4 @@ jobs:
       - name: Test the release tag and breaking-PR checks
         run: scripts/test-release-check.sh
       - name: Test scripts/api-compat.mjs
-        run: node --test scripts/
+        run: node --test scripts/*.test.mjs
