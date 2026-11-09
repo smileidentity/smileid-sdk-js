@@ -6,7 +6,7 @@ This repository holds Smile ID's V3 server-side SDK for JavaScript/TypeScript.
 
 The API surface (endpoints, request and response shapes) comes from `specs/v3/openapi.yaml` in [smileidentity/api-reference](https://github.com/smileidentity/api-reference). Read it at a release tag such as `v3.1115.0`, not at `main`. When a task or pull request names a tag, use that one. When the SDK and the spec disagree, the spec wins.
 
-- Ignore anything marked `x-smile-sdk-exclude: true`. These are server-to-server details, such as the HMAC signature headers, that the SDKs leave out on purpose.
+- Ignore anything marked `x-smile-sdk-exclude: true`. These are server-to-server details, such as the HMAC signature headers, that the SDKs leave out on purpose. The SDK doesn't sign requests. It authenticates every call with the spec's `SmileIDToken` scheme: it gets a token from `POST /v3/token` and sends it in the `SmileID-Token` header, in `src/client/transport.ts`. Keep that code when you ignore the excluded headers.
 - Don't add endpoints or fields that aren't in the spec. Internal endpoints are kept out of it on purpose.
 
 ## Layout
