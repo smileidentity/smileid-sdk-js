@@ -42,31 +42,10 @@ jobs:
             exit 1
           fi
 
-      - name: Verify the major version matches merged breaking PRs
+      - name: Verify the major version matches the breaking PRs in this release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PREV_TAG="$(git describe --tags --abbrev=0 --match 'v*' "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
-          if [ -z "$PREV_TAG" ]; then
-            echo "No earlier v* tag; skipping the breaking-change check."
-            exit 0
-          fi
-          PREV_DATE="$(git for-each-ref --format='%(creatordate:iso-strict)' "refs/tags/${PREV_TAG}")"
-          PREV_MAJOR="$(echo "${PREV_TAG#v}" | cut -d. -f1)"
-          THIS_MAJOR="$(echo "${GITHUB_REF_NAME#v}" | cut -d. -f1)"
-          BREAKING_PRS="$(gh pr list --repo "$GITHUB_REPOSITORY" --state merged --base main --label breaking \
-            --search "merged:>=${PREV_DATE}" --limit 100 --json number,title \
-            --jq '.[] | "#\(.number) \(.title)"')"
-          echo "Previous tag: ${PREV_TAG} (${PREV_DATE}). Breaking PRs merged since:"
-          echo "${BREAKING_PRS:-  none}"
-          if [ -n "$BREAKING_PRS" ] && [ "$THIS_MAJOR" -le "$PREV_MAJOR" ]; then
-            echo "::error::PRs labelled 'breaking' merged since ${PREV_TAG}, so ${GITHUB_REF_NAME} must bump the major version."
-            exit 1
-          fi
-          if [ -z "$BREAKING_PRS" ] && [ "$THIS_MAJOR" -gt "$PREV_MAJOR" ]; then
-            echo "::error::${GITHUB_REF_NAME} bumps the major version, but no PR labelled 'breaking' merged since ${PREV_TAG}."
-            exit 1
-          fi
+        run: scripts/check-release-breaking.sh "$GITHUB_REF_NAME"
 
       - run: npm ci
       - name: Build

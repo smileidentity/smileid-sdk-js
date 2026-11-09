@@ -28,6 +28,8 @@ CI runs these on every pull request (`.github/workflows/quality-gates.yml`):
 
 `scripts/bump-version.sh <major|minor|patch>` sets the new version and moves the changelog's Unreleased entries under it.
 
+`release.yml` runs `scripts/check-release-breaking.sh`: a release must bump the major version if, and only if, it contains a PR labelled `breaking` (0.x to 1.0.0 needs none). Script tests run in the `scripts` job.
+
 ## Org-wide conventions
 
 Org-wide agent conventions live at [smileidentity/agents](https://github.com/smileidentity/agents) (a private repository, for internal contributors).
