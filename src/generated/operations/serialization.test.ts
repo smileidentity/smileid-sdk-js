@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { SmileID } from '../../client/client.js';
 import { Consent } from '../../helpers/consent.js';
+import { VERSION } from '../../version.js';
 import {
   FAKE_IMAGE,
   FAKE_LIVENESS,
@@ -26,6 +27,11 @@ const accepted202 = (status: string): Response =>
     job_id: 'job_01h8x9y2z3a4b5c6d7e8f9g0h1',
     user_id: 'user_01h8x9y2z3a4b5c6d7e8f9g0h1',
   });
+
+/** Escape every RegExp metacharacter in `s`. */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 /** The single non-token request captured by the router. */
 function opRequest(requests: RecordedRequest[]): RecordedRequest {
@@ -62,11 +68,11 @@ test('enhanced_kyc: scalar + JSON parts, User-ID header, no Partner-ID header', 
   assert.equal(req.headers['SmileID-Partner-ID'], undefined, 'no Partner-ID header for enhanced_kyc');
   assert.ok(req.headers['SmileID-Token'], 'token attached');
   assert.equal(req.headers['SmileID-Source-SDK'], 'node');
-  assert.equal(req.headers['SmileID-Source-SDK-Version'], '12.2.0');
+  assert.equal(req.headers['SmileID-Source-SDK-Version'], VERSION);
   // Cross-SDK format: smileid-sdk-node/<version> (node/<runtime version, no leading v>).
   assert.match(
     req.headers['User-Agent'],
-    /^smileid-sdk-node\/12\.2\.0 \(node\/\d+\.\d+\.\d+[^)]*\)$/,
+    new RegExp(`^smileid-sdk-node/${escapeRegExp(VERSION)} \\(node/\\d+\\.\\d+\\.\\d+[^)]*\\)$`),
   );
   assert.match(req.headers['Content-Type'], /^multipart\/form-data; boundary=/);
 
