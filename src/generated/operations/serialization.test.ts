@@ -636,3 +636,268 @@ test('status: a 404 with an empty body maps to an empty JobStatus', async () => 
   assert.equal(js.userId, null);
   assert.equal(js.message, null);
 });
+
+// ---- AML ----------------------------------------------------------------------
+
+const amlBase = {
+  countries: ['NG', 'KE'],
+  fullName: 'John Doe',
+  userDetails,
+  consent,
+};
+
+const consentWire =
+  '{"granted":true,"granted_at":"2026-03-06T12:00:00.000Z","notice_language":"EN","notice_privacy_policy_url":"https://example.com/privacy"}';
+
+test('aml.screen: exact multipart body, JSON-encoded arrays, no User-ID or Partner-ID header', async () => {
+  const { fetch, requests } = routerFetch(() =>
+    jsonResponse(202, {
+      status: 'accepted',
+      message: 'Job submitted successfully',
+      job_id: 'job_01h8x9y2z3a4b5c6d7e8f9g0h1',
+      user_id: 'user_01h8x9y2z3a4b5c6d7e8f9g0h1',
+    }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const accepted = await client.aml.screen({
+    ...amlBase,
+    birthYear: '1990',
+    strictMatch: false,
+    aliases: ['Johnny Doe'],
+    searchExistingUser: true,
+    userId: 'user-1234',
+    callbackUrl: 'https://example.com/callback',
+    partnerParams: { order_id: 'ORD-1' },
+    metadata: [{ name: 'k', value: 'v' }],
+  });
+
+  assert.equal(accepted.isAccepted, true);
+  assert.equal(accepted.jobId, 'job_01h8x9y2z3a4b5c6d7e8f9g0h1');
+  assert.equal(accepted.userId, 'user_01h8x9y2z3a4b5c6d7e8f9g0h1');
+
+  const req = opRequest(requests);
+  assert.equal(req.method, 'POST');
+  assert.match(req.url, /\/v3\/aml$/);
+  assert.equal(req.headers['User-ID'], undefined);
+  assert.equal(req.headers['SmileID-Partner-ID'], undefined);
+  assert.equal(req.headers['SmileID-Idempotency-Key'], undefined);
+  assert.ok(req.headers['SmileID-Token']);
+  assert.match(req.headers['Content-Type'], /^multipart\/form-data; boundary=/);
+  const field = (name: string): string | undefined =>
+    req.bodyText.match(new RegExp(`name="${name}"\\r\\n(?:Content-Type: [^\\r]*\\r\\n)?\\r\\n([^\\r]*)\\r\\n`))?.[1];
+  assert.equal(field('full_name'), 'John Doe');
+  assert.equal(field('birth_year'), '1990');
+  assert.equal(field('strict_match'), 'false');
+  assert.equal(field('search_existing_user'), 'true');
+  assert.equal(field('user_id'), 'user-1234');
+  assert.equal(field('callback_url'), 'https://example.com/callback');
+  assert.equal(field('countries'), '["NG","KE"]');
+  assert.equal(field('aliases'), '["Johnny Doe"]');
+  assert.equal(
+    field('user_details'),
+    '{"given_names":"John","last_name":"Doe","email":"john@example.com"}',
+  );
+  assert.equal(field('consent'), consentWire);
+  assert.equal(field('partner_params'), '{"order_id":"ORD-1"}');
+  assert.equal(field('metadata'), '[{"name":"k","value":"v"}]');
+});
+
+test('aml.screen: omits optional parts and falls back to the client default callback', async () => {
+  const { fetch, requests } = routerFetch(() => accepted202('accepted'));
+  const client = new SmileID({
+    partnerId: '1234',
+    apiKey: 'k',
+    fetch,
+    defaultCallbackUrl: 'https://example.com/default',
+  });
+
+  await client.aml.screen(amlBase);
+
+  const body = opRequest(requests).bodyText;
+  for (const name of ['birth_year', 'strict_match', 'search_existing_user', 'user_id', 'aliases']) {
+    assert.equal(countParts(body, name), 0, name);
+  }
+  assert.match(body, /name="callback_url"\r\n\r\nhttps:\/\/example.com\/default\r\n/);
+});
+
+test('aml.screen: client-side validation fails before any request', async () => {
+  const { fetch, requests } = routerFetch(() => accepted202('accepted'));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  const cases: Record<string, Partial<Parameters<typeof client.aml.screen>[0]>> = {
+    'countries must contain': { countries: [] },
+    'aliases must contain at most 20': { aliases: Array.from({ length: 21 }, () => 'a') },
+    'birthYear must be a four-digit': { birthYear: '90' },
+    'userId is required when searchExistingUser': { searchExistingUser: true },
+  };
+  for (const [message, override] of Object.entries(cases)) {
+    assert.throws(
+      () => client.aml.screen({ ...amlBase, ...override }),
+      (err: Error) => err.message.includes(message),
+    );
+  }
+  assert.equal(requests.length, 0);
+});
+
+test('aml.screenSync: idempotency key header, optional callback, parses the terminal result', async () => {
+  const { fetch, requests } = routerFetch(() =>
+    jsonResponse(200, {
+      status: 'attention',
+      message: 'Screening completed: matches found.',
+      reason: 'aml_match_found',
+      created_at: '2026-07-20T12:00:00.000Z',
+      completed_at: '2026-07-20T12:00:01.000Z',
+      product: 'one_time_aml',
+      partner_params: { order_id: 'ORD-1' },
+      kyc_receipt: 'https://example.com/receipt',
+      strict_match: true,
+      no_of_persons_found: 1,
+      people: [{ name: 'John Doe', news_summary: [{ news_category: 'regulatory' }] }],
+      user_provided_info: {
+        given_names: 'John',
+        last_name: 'Doe',
+        email: 'john@example.com',
+        phone_number: null,
+      },
+      consent: { granted: true },
+      antifraud: null,
+      device_signals: { ip_address: '10.0.0.1' },
+    }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const result = await client.aml.screenSync({
+    ...amlBase,
+    idempotencyKey: 'kuda-onboarding-8f14e45fceea167a',
+  });
+
+  const req = opRequest(requests);
+  assert.match(req.url, /\/v3\/aml\/sync$/);
+  assert.equal(req.headers['SmileID-Idempotency-Key'], 'kuda-onboarding-8f14e45fceea167a');
+  assert.equal(countParts(req.bodyText, 'callback_url'), 0);
+
+  assert.equal(result.status, 'attention');
+  assert.equal(result.reason, 'aml_match_found');
+  assert.equal(result.completedAt, '2026-07-20T12:00:01.000Z');
+  assert.equal(result.kycReceipt, 'https://example.com/receipt');
+  assert.equal(result.strictMatch, true);
+  assert.equal(result.noOfPersonsFound, 1);
+  assert.deepEqual(result.userProvidedInfo, {
+    givenNames: 'John',
+    lastName: 'Doe',
+    email: 'john@example.com',
+    phoneNumber: null,
+  });
+  // Free-form objects keep their wire keys.
+  assert.deepEqual(result.partnerParams, { order_id: 'ORD-1' });
+  assert.deepEqual(result.people, [
+    { name: 'John Doe', news_summary: [{ news_category: 'regulatory' }] },
+  ]);
+  assert.deepEqual(result.consent, { granted: true });
+  assert.equal(result.antifraud, null);
+  assert.deepEqual(result.deviceSignals, { ip_address: '10.0.0.1' });
+});
+
+test('aml.screenSync: is not retried after a 408', async () => {
+  const { fetch, requests } = routerFetch(() =>
+    jsonResponse(408, { status: 'Request Timeout', message: 'Provider timed out.' }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  await assert.rejects(client.aml.screenSync(amlBase));
+  assert.equal(requests.filter((r) => !r.url.endsWith('/v3/token')).length, 1);
+});
+
+test('aml.monitor: same body as screen, fullName optional with searchExistingUser', async () => {
+  const { fetch, requests } = routerFetch(() => accepted202('accepted'));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const accepted = await client.aml.monitor({
+    countries: ['NG'],
+    userDetails,
+    consent,
+    searchExistingUser: true,
+    userId: 'user-1234',
+  });
+
+  assert.equal(accepted.isAccepted, true);
+  const req = opRequest(requests);
+  assert.match(req.url, /\/v3\/aml\/monitoring$/);
+  assert.equal(countParts(req.bodyText, 'full_name'), 0);
+  assert.match(req.bodyText, /name="countries"\r\nContent-Type: application\/json\r\n\r\n\["NG"\]\r\n/);
+  assert.match(req.bodyText, /name="search_existing_user"\r\n\r\ntrue\r\n/);
+
+  await client.aml.monitor({ ...amlBase });
+  const sent = requests.filter((r) => !r.url.endsWith('/v3/token'))[1];
+  assert.match(sent.bodyText, /name="full_name"\r\n\r\nJohn Doe\r\n/);
+});
+
+test('aml.monitor: requires fullName unless searchExistingUser is true', async () => {
+  const { fetch, requests } = routerFetch(() => accepted202('accepted'));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  assert.throws(
+    () => client.aml.monitor({ countries: ['NG'], userDetails, consent }),
+    (err: Error) => err.message.includes('fullName is required'),
+  );
+  assert.equal(requests.length, 0);
+});
+
+test('aml.monitoringNews: path, query and response parse', async () => {
+  const { fetch, requests } = routerFetch(() =>
+    jsonResponse(200, {
+      job_id: 'a1b2c3d4e5',
+      product: 'aml_monitoring_news',
+      user_id: 'user_123',
+      meta: { current_page: 2, limit: 10, total_count: 11 },
+      news: [
+        {
+          body: 'Sample adverse-media content.',
+          published_date: '2026-01-15T12:00:00.000Z',
+          publisher: 'Example News Publisher',
+          publisher_country_code: 'NG',
+          title: 'Sample AML Monitoring News Item',
+          url: 'https://example.com/news/sample-aml-monitoring',
+        },
+      ],
+    }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const res = await client.aml.monitoringNews('a1b2c3d4e5', 'ref/001', {
+    newsCategory: 'financial_crime',
+    page: 2,
+    limit: 10,
+  });
+
+  const req = opRequest(requests);
+  assert.equal(req.method, 'GET');
+  assert.equal(
+    req.url.replace(/^https?:\/\/[^/]+/, ''),
+    '/v3/aml/monitoring/a1b2c3d4e5/news/ref%2F001?news_category=financial_crime&page=2&limit=10',
+  );
+  assert.equal(req.bodyText, '');
+  assert.equal(res.jobId, 'a1b2c3d4e5');
+  assert.deepEqual(res.meta, { currentPage: 2, limit: 10, totalCount: 11 });
+  assert.equal(res.news[0].publisherCountryCode, 'NG');
+  assert.equal(res.news[0].publishedDate, '2026-01-15T12:00:00.000Z');
+});
+
+test('aml.monitoringNews: page and limit are omitted when not given', async () => {
+  const { fetch, requests } = routerFetch(() =>
+    jsonResponse(200, { job_id: 'j', product: 'aml_monitoring_news', user_id: 'u', meta: {}, news: [] }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  await client.aml.monitoringNews('j', 'r', { newsCategory: 'other' });
+
+  assert.match(opRequest(requests).url, /\/news\/r\?news_category=other$/);
+});
+
+test('aml.screenSync: a result body missing its free-form objects leaves them undefined', async () => {
+  const { fetch } = routerFetch(() => jsonResponse(200, {}));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const result = await client.aml.screenSync(amlBase);
+  assert.equal(result.partnerParams, undefined);
+});

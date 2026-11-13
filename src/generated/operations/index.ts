@@ -15,6 +15,9 @@ import type { RequestPlan, Transport } from '../../client/transport.js';
 import {
   AcceptedResponse,
   JobStatus,
+  type AmlMonitoringNewsParams,
+  type AmlMonitoringNewsResponse,
+  type AmlMonitoringParams,
   type AuthenticationParams,
   type BankCodesParams,
   type BankCodesResponse,
@@ -28,6 +31,9 @@ import {
   type IdStatusParams,
   type IdStatusResponse,
   type MetadataItem,
+  type OneTimeAmlParams,
+  type OneTimeAmlResult,
+  type OneTimeAmlSyncParams,
   type PartnerParams,
   type RegistrationParams,
   type ReportFraudParams,
@@ -154,6 +160,24 @@ function toJobStatus(json: unknown): JobStatus {
     userId: typeof o.user_id === 'string' ? o.user_id : null,
     message: typeof o.message === 'string' ? o.message : null,
   });
+}
+
+/**
+ * Camelizes the typed envelope of a One-Time AML result. The free-form objects
+ * keep their wire keys, so partner-supplied keys and provider fields survive.
+ */
+function toOneTimeAmlResult(json: unknown): OneTimeAmlResult {
+  // The transport guarantees a JSON object on success.
+  const o = json as Record<string, unknown>;
+  const { partner_params, consent, antifraud, device_signals, people, ...typed } = o;
+  return {
+    ...(camelizeKeys(typed) as object),
+    partnerParams: partner_params,
+    consent,
+    antifraud,
+    deviceSignals: device_signals,
+    people,
+  } as OneTimeAmlResult;
 }
 
 function effectiveCallback(
@@ -427,6 +451,105 @@ export async function compare(
     ...planExtras(opts),
   });
   return toAccepted(result.json);
+}
+
+// ---- AML --------------------------------------------------------------------
+
+function amlParts(
+  params: OneTimeAmlParams | AmlMonitoringParams,
+  opts: RequestOptions | undefined,
+  transport: Transport,
+): MultipartPart[] {
+  return [
+    ...scalar('full_name', params.fullName),
+    ...scalar('birth_year', params.birthYear),
+    ...scalar('strict_match', params.strictMatch),
+    ...scalar('search_existing_user', params.searchExistingUser),
+    ...scalar('user_id', params.userId),
+    ...scalar('callback_url', effectiveCallback(params.callbackUrl, opts, transport)),
+    // Arrays travel as one JSON-encoded string: multipart has no array encoding.
+    ...jsonPart('countries', JSON.stringify(params.countries)),
+    ...(params.aliases ? jsonPart('aliases', JSON.stringify(params.aliases)) : []),
+    ...jsonPart('user_details', userDetailsJson(params.userDetails)),
+    ...jsonPart('consent', consentJson(params.consent)),
+    ...optionalJson('partner_params', params.partnerParams),
+    ...optionalJson('metadata', params.metadata),
+  ];
+}
+
+export async function oneTimeAml(
+  transport: Transport,
+  params: OneTimeAmlParams,
+  opts?: RequestOptions,
+): Promise<AcceptedResponse> {
+  const result = await transport.execute({
+    method: 'POST',
+    path: '/v3/aml',
+    authenticated: true,
+    needsPartnerIdHeader: false,
+    idempotent: false,
+    multipart: buildMultipart(amlParts(params, opts, transport)),
+    ...planExtras(opts),
+  });
+  return toAccepted(result.json);
+}
+
+export async function oneTimeAmlSync(
+  transport: Transport,
+  params: OneTimeAmlSyncParams,
+  opts?: RequestOptions,
+): Promise<OneTimeAmlResult> {
+  const result = await transport.execute({
+    method: 'POST',
+    path: '/v3/aml/sync',
+    authenticated: true,
+    needsPartnerIdHeader: false,
+    idempotent: false, // never auto-retried: a repeat would be a second billed screening
+    headers: { 'SmileID-Idempotency-Key': params.idempotencyKey },
+    multipart: buildMultipart(amlParts(params, opts, transport)),
+    ...planExtras(opts),
+  });
+  return toOneTimeAmlResult(result.json);
+}
+
+export async function amlMonitoring(
+  transport: Transport,
+  params: AmlMonitoringParams,
+  opts?: RequestOptions,
+): Promise<AcceptedResponse> {
+  const result = await transport.execute({
+    method: 'POST',
+    path: '/v3/aml/monitoring',
+    authenticated: true,
+    needsPartnerIdHeader: false,
+    idempotent: false,
+    multipart: buildMultipart(amlParts(params, opts, transport)),
+    ...planExtras(opts),
+  });
+  return toAccepted(result.json);
+}
+
+export async function amlMonitoringNews(
+  transport: Transport,
+  jobId: string,
+  reference: string,
+  params: AmlMonitoringNewsParams,
+  opts?: RequestOptions,
+): Promise<AmlMonitoringNewsResponse> {
+  const result = await transport.execute({
+    method: 'GET',
+    path: `/v3/aml/monitoring/${encodeURIComponent(jobId)}/news/${encodeURIComponent(reference)}`,
+    authenticated: true,
+    needsPartnerIdHeader: false,
+    idempotent: true,
+    query: {
+      news_category: params.newsCategory,
+      page: params.page === undefined ? undefined : String(params.page),
+      limit: params.limit === undefined ? undefined : String(params.limit),
+    },
+    ...planExtras(opts),
+  });
+  return camelizeKeys(result.json) as AmlMonitoringNewsResponse;
 }
 
 // ---- status / replay / fraud ----------------------------------------------
