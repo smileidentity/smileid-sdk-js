@@ -24,7 +24,7 @@ Automated pull requests use these labels and branches:
 | Label | Branch | Meaning |
 |---|---|---|
 | `spec-sync` | `spec-sync/rolling` | Brings the SDK up to a new spec tag. There is one rolling pull request at a time, and the automation finds it by this branch name, so don't open another. |
-| `spec-sync` | `spec-sync/<scope>` | A run limited to one product, such as the backlog run split by product. |
+| `spec-sync` | `spec-sync/<scope>` | A manual run limited to one part of the spec, such as AML operations. |
 | `spec-sync` and `breaking` | `spec-sync/breaking-<tag>` | A change that needs a major release. Breaking changes always get their own pull request. |
 | `release` | `release/vX.Y.Z` | A version bump and changelog entry. Made by hand for now. An automated release train is planned. |
 
