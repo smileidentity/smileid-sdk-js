@@ -21,7 +21,7 @@ import { VERSION } from '../version.js';
 const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 
 /** Base backoff in ms (SDK choice — not in the spec). */
-const BACKOFF_BASE_MS = 50;
+const BACKOFF_BASE_MS = 500;
 
 /** Cap on an honoured Retry-After delay (cross-SDK standard). */
 const RETRY_AFTER_CAP_SECONDS = 60;
