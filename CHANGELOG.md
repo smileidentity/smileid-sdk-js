@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Retries without a `Retry-After` header now start at a 500 ms backoff, up from 50 ms, to match the other SDKs and ease load on a slow API.
+- Retries without a `Retry-After` header now start at a 500 ms backoff, up from 50 ms, to match the Go, Python and Ruby SDKs and ease load on a slow API.
 
 ## [13.0.0] - 2026-11-09
 
