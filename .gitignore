@@ -20,3 +20,6 @@ npm-debug.log*
 
 # npm cache
 .npm/
+
+# API reports from scripts/api-report.sh
+api-reports/

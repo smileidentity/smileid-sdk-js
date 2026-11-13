@@ -10,7 +10,9 @@
     "prebuild": "rm -rf dist",
     "build": "tsc",
     "lint": "eslint .",
-    "test": "npm run build && node --test $(find dist -name '*.test.js')"
+    "test": "npm run build && node --test $(find dist -name '*.test.js')",
+    "coverage": "npm run build -- --sourceMap && c8 node --test $(find dist -name '*.test.js')",
+    "coverage:generated": "c8 check-coverage --include 'src/generated/**' --include 'dist/generated/**' --per-file --lines 100 --branches 100 --functions 100 --statements 100"
   },
   "license": "MIT",
   "repository": {
@@ -37,7 +39,9 @@
     "!dist/testing"
   ],
   "devDependencies": {
+    "@microsoft/api-extractor": "^7.59.4",
     "@types/node": "^22.10.0",
+    "c8": "^11.0.0",
     "eslint": "^9.39.2",
     "globals": "^16.0.0",
     "typescript": "^5.7.2",
