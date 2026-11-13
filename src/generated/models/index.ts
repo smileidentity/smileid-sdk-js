@@ -179,6 +179,72 @@ export interface CompareParams extends EntryParamsBase {
   sandboxResult?: number;
 }
 
+/** Fields shared by the One-Time AML and AML Monitoring screening requests. */
+interface AmlParamsBase extends EntryParamsBase {
+  /** ISO 3166-1 alpha-2 country codes (uppercase) to screen against. At least one. */
+  countries: string[];
+  /** Four-digit birth year used to narrow the screening. */
+  birthYear?: string;
+  /** When true (the API default) a higher match threshold is used. */
+  strictMatch?: boolean;
+  /** Alternate names to screen alongside the full name. At most 20. */
+  aliases?: string[];
+  /** Reuse the name of the user's prior KYC enrollment. Requires userId. */
+  searchExistingUser?: boolean;
+  /** Sent as a body field. Required when searchExistingUser is true. */
+  userId?: string;
+}
+
+/** aml.screen → POST /v3/aml. */
+export interface OneTimeAmlParams extends AmlParamsBase {
+  fullName: string;
+}
+
+/** aml.screenSync → POST /v3/aml/sync. The callback URL is optional: none is sent. */
+export interface OneTimeAmlSyncParams extends OneTimeAmlParams {
+  /**
+   * Makes a repeated submission safe: a key you already used resolves to the same job and
+   * returns its original result. 16 to 128 characters of A-Z a-z 0-9 - _.
+   */
+  idempotencyKey?: string;
+}
+
+/** aml.monitor → POST /v3/aml/monitoring. */
+export interface AmlMonitoringParams extends AmlParamsBase {
+  /** Required unless searchExistingUser is true. */
+  fullName?: string;
+}
+
+/** News categories accepted by aml.monitoringNews. */
+export type AmlNewsCategory =
+  | 'arms_trafficking'
+  | 'credit_update'
+  | 'environmental_crime'
+  | 'financial_crime'
+  | 'human_rights_violation'
+  | 'leadership_change'
+  | 'legal_risk'
+  | 'location_change'
+  | 'narcotics'
+  | 'other'
+  | 'other_crime'
+  | 'ownership_change'
+  | 'product_change'
+  | 'regulatory'
+  | 'sexual_crime'
+  | 'technology_event'
+  | 'terrorism'
+  | 'violent_crime';
+
+/** aml.monitoringNews query (GET /v3/aml/monitoring/{job_id}/news/{reference}). */
+export interface AmlMonitoringNewsParams {
+  newsCategory: AmlNewsCategory;
+  /** Results page, 1 to 100. The API default is 1. */
+  page?: number;
+  /** Items per page, 1 to 100. The API default is 25. */
+  limit?: number;
+}
+
 /** verifications.replay optional body (spec §6.10, corrected to multipart). */
 export interface ReplayParams {
   callbackUrl?: string;
@@ -364,4 +430,54 @@ export interface IdStatusResponse {
   lastHourSuccessRate: string;
   lastKnownStatus: string;
   lastCheckSuccessRate: string;
+}
+
+/** aml.monitoringNews response. */
+export interface AmlMonitoringNewsResponse {
+  jobId: string;
+  product: 'aml_monitoring_news';
+  userId: string;
+  meta: { currentPage: number; limit: number; totalCount: number };
+  news: {
+    body: string;
+    publishedDate: string;
+    publisher: string;
+    publisherCountryCode: string;
+    title: string;
+    url: string;
+  }[];
+}
+
+/**
+ * A sanctions, PEP or adverse-media hit. The fields are kept exactly as the API
+ * sends them (snake_case), because the API may add provider fields at any time.
+ */
+export type AmlPersonMatch = Record<string, unknown>;
+
+/**
+ * The terminal result of a One-Time AML screening: the body of aml.screenSync and
+ * the payload the async callback delivers. `partnerParams`, `consent`, `antifraud`,
+ * `deviceSignals` and `people` hold free-form data and keep their wire keys.
+ */
+export interface OneTimeAmlResult {
+  status: 'clear' | 'block' | 'attention' | 'error';
+  message: string;
+  reason: 'aml_match_found' | 'news_media_match' | 'service_unavailable' | 'high_risk' | null;
+  createdAt: string;
+  completedAt?: string;
+  product: 'one_time_aml';
+  partnerParams: Record<string, string> | null;
+  kycReceipt: string | null;
+  strictMatch: boolean;
+  noOfPersonsFound: number;
+  people: AmlPersonMatch[];
+  userProvidedInfo: {
+    givenNames: string | null;
+    lastName: string | null;
+    email: string | null;
+    phoneNumber: string | null;
+  };
+  consent: Record<string, unknown>;
+  antifraud: Record<string, unknown> | null;
+  deviceSignals: Record<string, unknown> | null;
 }

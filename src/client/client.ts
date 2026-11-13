@@ -13,6 +13,7 @@ import * as ops from '../generated/operations/index.js';
 import { ValidationError } from '../errors/index.js';
 import { waitUntilComplete } from '../helpers/poll.js';
 import {
+  validateAml,
   validateAuthentication,
   validateBiometricKyc,
   validateReportFraud,
@@ -20,6 +21,9 @@ import {
 } from '../helpers/validation.js';
 import type {
   AcceptedResponse,
+  AmlMonitoringNewsParams,
+  AmlMonitoringNewsResponse,
+  AmlMonitoringParams,
   AuthenticationParams,
   BankCodesParams,
   BankCodesResponse,
@@ -33,6 +37,9 @@ import type {
   IdStatusParams,
   IdStatusResponse,
   JobStatus,
+  OneTimeAmlParams,
+  OneTimeAmlResult,
+  OneTimeAmlSyncParams,
   RegistrationParams,
   ReplayParams,
   ReportFraudParams,
@@ -82,6 +89,19 @@ export class SmileID {
       options?: RequestOptions,
     ): Promise<AcceptedResponse>;
     compare(params: CompareParams, options?: RequestOptions): Promise<AcceptedResponse>;
+  };
+
+  /** One-Time AML screening and AML Monitoring. */
+  readonly aml: {
+    screen(params: OneTimeAmlParams, options?: RequestOptions): Promise<AcceptedResponse>;
+    screenSync(params: OneTimeAmlSyncParams, options?: RequestOptions): Promise<OneTimeAmlResult>;
+    monitor(params: AmlMonitoringParams, options?: RequestOptions): Promise<AcceptedResponse>;
+    monitoringNews(
+      jobId: string,
+      reference: string,
+      params: AmlMonitoringNewsParams,
+      options?: RequestOptions,
+    ): Promise<AmlMonitoringNewsResponse>;
   };
 
   /** Job status, polling, and callback replay (spec §6.8–§6.10). */
@@ -199,6 +219,29 @@ export class SmileID {
         validateUserDetails(params.userDetails);
         return ops.compare(t, params, options);
       },
+    };
+
+    this.aml = {
+      screen: (params, options) => {
+        validateAml(params);
+        return ops.oneTimeAml(t, params, options);
+      },
+      screenSync: (params, options) => {
+        validateAml(params);
+        return ops.oneTimeAmlSync(t, params, options);
+      },
+      monitor: (params, options) => {
+        validateAml(params);
+        // fullName may only be left out when the name is resolved from the user's prior KYC.
+        if (!params.fullName && params.searchExistingUser !== true) {
+          throw new ValidationError({
+            message: 'fullName is required unless searchExistingUser is true.',
+          });
+        }
+        return ops.amlMonitoring(t, params, options);
+      },
+      monitoringNews: (jobId, reference, params, options) =>
+        ops.amlMonitoringNews(t, jobId, reference, params, options),
     };
 
     this.verifications = {
