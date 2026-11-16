@@ -1,0 +1,121 @@
+name: Quality gates
+
+on:
+  pull_request:
+    branches: [main]
+    # labeled/unlabeled re-run the gates when `breaking` or a bot label changes.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+concurrency:
+  group: quality-gates-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  BASE_REF: ${{ github.event.pull_request.base.ref }}
+  # Bot PRs (spec-sync, parity-port, release, or a [bot] author) must meet the
+  # changed-line coverage and no-exclusion gates; other PRs only report them.
+  BOT_PR: ${{ contains(github.event.pull_request.labels.*.name, 'spec-sync') || contains(github.event.pull_request.labels.*.name, 'parity-port') || contains(github.event.pull_request.labels.*.name, 'release') || endsWith(github.event.pull_request.user.login, '[bot]') }}
+  BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'breaking') }}
+
+jobs:
+  api-compat:
+    name: api-compat
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - run: npm ci
+      - name: Compare the public API with the last release
+        run: |
+          # The newest stable release the base branch contains.
+          TAG="$(scripts/previous-stable-tag.sh "origin/$BASE_REF")"
+          if [ -z "$TAG" ]; then
+            echo "::notice title=api-compat::The base branch has no vX.Y.Z release tag yet, so there is no API to compare against."
+            exit 0
+          fi
+          echo "Comparing with $TAG"
+          scripts/api-report.sh "$TAG" api-reports/release.api.md
+          scripts/api-report.sh "origin/$BASE_REF" api-reports/base.api.md
+          scripts/api-report.sh HEAD api-reports/head.api.md
+          if node scripts/api-compat.mjs api-reports/release.api.md api-reports/head.api.md api-reports/base.api.md; then
+            exit 0
+          fi
+          if [ "$BREAKING" = "true" ]; then
+            echo "::notice title=api-compat::Breaking changes accepted because the PR has the 'breaking' label."
+            exit 0
+          fi
+          echo "::error title=api-compat::This PR breaks the public API released in $TAG. Keep the old API, or add the 'breaking' label if the break is intended."
+          exit 1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: api-reports
+          path: api-reports/
+          if-no-files-found: ignore
+
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - run: npm ci
+      - name: Test with coverage
+        run: npm run coverage
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage
+          path: |
+            coverage/cobertura-coverage.xml
+            coverage/lcov.info
+      - name: No coverage exclusions added
+        run: |
+          if ! scripts/check-coverage-exclusions.sh "origin/$BASE_REF"; then
+            if [ "$BOT_PR" = "true" ]; then exit 1; fi
+            echo "::warning title=coverage::This PR adds coverage exclusions. Bot PRs would fail here."
+          fi
+      - name: Changed lines are covered
+        run: |
+          if ! pipx run --spec diff-cover==10.6.0 diff-cover coverage/cobertura-coverage.xml \
+              --compare-branch="origin/$BASE_REF" --fail-under=100; then
+            if [ "$BOT_PR" = "true" ]; then exit 1; fi
+            echo "::warning title=coverage::Changed lines are not fully covered. Bot PRs would fail here."
+          fi
+      - name: generated/ has 100% line and branch coverage
+        run: npm run coverage:generated
+
+  scripts:
+    name: scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version-file: '.nvmrc'
+      - name: ShellCheck
+        run: shellcheck scripts/*.sh
+      - name: Test scripts/bump-version.sh
+        run: scripts/test-bump-version.sh
+      - name: Test scripts/check-coverage-exclusions.sh
+        run: scripts/test-check-coverage-exclusions.sh
+      - name: Test the release tag and breaking-PR checks
+        run: scripts/test-release-check.sh
+      - name: Test scripts/api-compat.mjs
+        run: node --test scripts/*.test.mjs

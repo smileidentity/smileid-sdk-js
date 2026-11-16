@@ -66,8 +66,8 @@ function scalar(name: string, value: string | number | boolean | undefined): Mul
   return [{ kind: 'scalar', name, value: str }];
 }
 
-function jsonPart(name: string, json: string | undefined): MultipartPart[] {
-  return json === undefined ? [] : [{ kind: 'json', name, json }];
+function jsonPart(name: string, json: string): MultipartPart[] {
+  return [{ kind: 'json', name, json }];
 }
 
 function optionalJson(
