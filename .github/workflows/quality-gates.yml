@@ -109,8 +109,23 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version-file: '.nvmrc'
+      # Pinned, so a new runner image cannot bring a ShellCheck with new rules.
+      - name: Install ShellCheck
+        env:
+          SHELLCHECK_VERSION: v0.11.0
+          SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+        run: |
+          set -euo pipefail
+          archive="shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          curl -fsSLo "$RUNNER_TEMP/$archive" \
+            "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/${archive}"
+          echo "${SHELLCHECK_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/shellcheck-${SHELLCHECK_VERSION}" >>"$GITHUB_PATH"
       - name: ShellCheck
-        run: shellcheck scripts/*.sh
+        run: |
+          shellcheck --version
+          shellcheck scripts/*.sh
       - name: Test scripts/bump-version.sh
         run: scripts/test-bump-version.sh
       - name: Test scripts/check-coverage-exclusions.sh
@@ -119,3 +134,40 @@ jobs:
         run: scripts/test-release-check.sh
       - name: Test scripts/api-compat.mjs
         run: node --test scripts/*.test.mjs
+
+  # The guards release.yml runs on the tag, run here first. Tags cannot be
+  # moved, so a guard that fails after the tag is pushed uses up the version.
+  release-guards:
+    name: release-guards
+    if: contains(github.event.pull_request.labels.*.name, 'release') || startsWith(github.event.pull_request.head.ref, 'release/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Release tags, for the previous release and the breaking-PR range.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version-file: '.nvmrc'
+      - name: Run the release guards on this pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          # The version comes from a release/vX.Y.Z branch, or else package.json.
+          if [[ "$HEAD_REF" == release/v* ]]; then
+            tag="${HEAD_REF#release/}"
+          else
+            tag="v$(node -p "require('./package.json').version")"
+          fi
+          echo "Checking the release of $tag"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "::error::Tag $tag already exists. Bump the version with scripts/bump-version.sh."
+            exit 1
+          fi
+          scripts/check-release.sh "$tag" HEAD

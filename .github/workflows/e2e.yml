@@ -26,7 +26,7 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       - name: Build
         run: npm run build
       - name: Run live e2e test
@@ -34,9 +34,11 @@ jobs:
           SMILE_PARTNER_ID: ${{ secrets.SMILE_PARTNER_ID }}
           SMILE_API_KEY: ${{ secrets.SMILE_API_KEY }}
           SMILE_BASE_URL: ${{ secrets.SMILE_E2E_BASE_URL }}
+        # tee shows the output in the log even when the test fails, and
+        # pipefail keeps the test's exit status.
         run: |
-          node --test dist/e2e.test.js > e2e-output.txt 2>&1
-          cat e2e-output.txt
+          set -o pipefail
+          node --test dist/e2e.test.js 2>&1 | tee e2e-output.txt
       - name: Fail if the e2e test skipped instead of running
         run: |
           if ! grep -qE '^# pass 1$' e2e-output.txt || ! grep -qE '^# skipped 0$' e2e-output.txt; then

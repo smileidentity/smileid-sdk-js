@@ -2,11 +2,15 @@
 #
 # Check that a release's major version matches the breaking PRs it contains.
 #
-# Usage: scripts/check-release-breaking.sh <tag>
+# Usage: scripts/check-release-breaking.sh <tag> [<rev>]
 #
-# The release contains the commits in <previous stable tag>..<tag>. A PR
+# <rev> is the commit being released, and defaults to <tag>. Pass it to check
+# a release before its tag exists, such as a release pull request's merge
+# commit.
+#
+# The release contains the commits in <previous stable tag>..<rev>. A PR
 # labelled `breaking` is in the release when its merge commit is an ancestor
-# of <tag> but not of the previous tag. Then:
+# of <rev> but not of the previous tag. Then:
 #   - breaking PRs in the release and no major bump: fail
 #   - a major bump and no breaking PRs: fail, except 0.x to 1.0.0, because
 #     stabilising an API is not a break
@@ -19,8 +23,9 @@
 set -euo pipefail
 
 tag="${1:-}"
+rev="${2:-$tag}"
 if [ -z "$tag" ]; then
-  echo "usage: scripts/check-release-breaking.sh <tag>" >&2
+  echo "usage: scripts/check-release-breaking.sh <tag> [<rev>]" >&2
   exit 2
 fi
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -32,7 +37,7 @@ fi
 this_major="${BASH_REMATCH[1]}"
 
 # The root commit has no parent, so there is nothing before it.
-parent="$(git rev-parse -q --verify "${tag}^" || true)"
+parent="$(git rev-parse -q --verify "${rev}^" || true)"
 prev=""
 if [ -n "$parent" ]; then
   prev="$("$here/previous-stable-tag.sh" "$parent" "$tag")"
@@ -65,7 +70,7 @@ while IFS=$'\t' read -r oid label; do
   [ -n "$oid" ] || continue
   # A merge commit this clone does not have cannot be in the release.
   git cat-file -e "${oid}^{commit}" 2>/dev/null || continue
-  if git merge-base --is-ancestor "$oid" "$tag" && ! git merge-base --is-ancestor "$oid" "$prev"; then
+  if git merge-base --is-ancestor "$oid" "$rev" && ! git merge-base --is-ancestor "$oid" "$prev"; then
     in_release="${in_release}${label}"$'\n'
   fi
 done <<<"$pr_lines"
