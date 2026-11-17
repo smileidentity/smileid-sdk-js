@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
       # Fails the job if the scan cannot finish or finds an ERROR-severity
-      # issue. The SARIF file keeps every finding for the uploads below.
+      # issue (CRITICAL or HIGH in newer rule sets). The SARIF file keeps every finding for the uploads below.
       - name: Run Semgrep
         shell: bash
         run: |
@@ -34,7 +34,7 @@ jobs:
             echo "::error::Semgrep exited with status $status, so the scan did not finish."
             exit "$status"
           fi
-          if ! blocking=$(python3 -c 'import json; print(sum(r["extra"]["severity"] == "ERROR" for r in json.load(open("semgrep.json"))["results"]))'); then
+          if ! blocking=$(python3 -c 'import json; print(sum(r["extra"].get("severity", "").upper() in {"ERROR", "CRITICAL", "HIGH"} for r in json.load(open("semgrep.json"))["results"]))'); then
             echo "::error::Could not read Semgrep's JSON output, so the findings could not be checked."
             exit 1
           fi
