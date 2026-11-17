@@ -12,6 +12,7 @@ import { Consent } from '../helpers/consent.js';
 import { resolveConfig } from './config.js';
 import { SmileID } from './client.js';
 import { Transport } from './transport.js';
+import { TOKEN_PRODUCT_BY_PATH } from '../generated/models/index.js';
 import {
   FAKE_IMAGE,
   FAKE_LIVENESS,
@@ -342,4 +343,23 @@ test('the three unauthenticated services calls never fetch a token', async () =>
   await client.services.supportedIdTypes();
   await client.services.supportedDocuments();
   assert.equal(tokenCalls(), 0);
+});
+
+test('the product table lists every spec operation that requires a product', () => {
+  assert.deepEqual(Object.values(TOKEN_PRODUCT_BY_PATH).sort(), [
+    'address_verification',
+    'aml',
+    'biometric_kyc',
+    'document_verification',
+    'enhanced_document_verification',
+    'enhanced_kyc',
+    'enhanced_kyc',
+    'one_time_aml',
+    'one_time_aml',
+    'phone_number_verification',
+    'residency_document_verification',
+    'smart_selfie_authentication',
+    'smart_selfie_compare',
+    'smart_selfie_registration',
+  ]);
 });
