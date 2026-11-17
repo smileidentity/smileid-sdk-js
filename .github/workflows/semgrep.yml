@@ -34,7 +34,10 @@ jobs:
             echo "::error::Semgrep exited with status $status, so the scan did not finish."
             exit "$status"
           fi
-          blocking=$(python3 -c 'import json; print(sum(r["extra"]["severity"] == "ERROR" for r in json.load(open("semgrep.json"))["results"]))')
+          if ! blocking=$(python3 -c 'import json; print(sum(r["extra"]["severity"] == "ERROR" for r in json.load(open("semgrep.json"))["results"]))'); then
+            echo "::error::Could not read Semgrep's JSON output, so the findings could not be checked."
+            exit 1
+          fi
           if [ "$blocking" -gt 0 ]; then
             echo "::error::Semgrep found $blocking ERROR-severity finding(s). Fix them, or add a nosemgrep comment that says why the code is safe."
             exit 1
