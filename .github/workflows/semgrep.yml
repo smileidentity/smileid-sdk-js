@@ -22,7 +22,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
       # Fails the job if the scan cannot finish or finds an ERROR-severity
-      # issue (CRITICAL or HIGH in newer rule sets). The SARIF file keeps every finding for the uploads below.
+      # issue (CRITICAL or HIGH in newer rule sets). The SARIF file keeps
+      # every finding for the uploads below.
       - name: Run Semgrep
         shell: bash
         run: |
