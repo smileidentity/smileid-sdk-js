@@ -128,6 +128,37 @@ for (const [product, call] of Object.entries(jobOperations)) {
   });
 }
 
+const amlBody = { countries: ['NG'], userDetails, consent, userId: 'user-1' };
+const amlOperations: Record<string, [string, (c: SmileID) => Promise<unknown>]> = {
+  'aml.screen': ['one_time_aml', (c) => c.aml.screen({ ...amlBody, fullName: 'John Doe' })],
+  'aml.screenSync': [
+    'one_time_aml',
+    (c) => c.aml.screenSync({ ...amlBody, fullName: 'John Doe', idempotencyKey: 'k'.repeat(16) }),
+  ],
+  'aml.monitor': ['aml', (c) => c.aml.monitor({ ...amlBody, fullName: 'John Doe' })],
+};
+
+for (const [name, [product, call]] of Object.entries(amlOperations)) {
+  test(`${name}: the token binds the job user and the ${product} product`, async () => {
+    const { fetch, requests } = routerFetch(anyResponse);
+    await call(new SmileID({ partnerId: '1234', apiKey: 'k', fetch }));
+    const req = requests.find(isToken);
+    assert.ok(req);
+    assert.deepEqual(fields(req), { user_id: 'user-1', product });
+  });
+}
+
+test('aml.monitoringNews: the token binds the aml product and no user', async () => {
+  const { fetch, requests } = routerFetch(() =>
+    jsonResponse(200, { job_id: 'j', product: 'aml_monitoring_news', user_id: 'u', meta: {}, news: [] }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  await client.aml.monitoringNews(jobId, 'ref_001', { newsCategory: 'financial_crime' });
+  const req = requests.find(isToken);
+  assert.ok(req);
+  assert.deepEqual(fields(req), { product: 'aml' });
+});
+
 for (const [name, call] of Object.entries(nonJobOperations)) {
   test(`${name}: the token binds nothing`, async () => {
     const { fetch, requests, tokenCalls } = routerFetch(anyResponse);
