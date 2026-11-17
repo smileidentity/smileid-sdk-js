@@ -44,7 +44,10 @@ fi
 
 # The heading bump-version.sh writes: "## [X.Y.Z] - YYYY-MM-DD".
 heading_re="^## \\[${version//./\\.}\\] - [0-9]{4}-[0-9]{2}-[0-9]{2}\$"
-if ! git show "${rev}:CHANGELOG.md" | grep -qE "$heading_re"; then
+# Read the file first: with pipefail, grep -q stopping early could make git
+# show fail with SIGPIPE on a large changelog.
+changelog="$(git show "${rev}:CHANGELOG.md")"
+if ! grep -qE "$heading_re" <<<"$changelog"; then
   echo "::error::CHANGELOG.md has no dated '## [${version}] - YYYY-MM-DD' heading for ${tag}."
   status=1
 else
