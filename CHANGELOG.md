@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `aml.screen` and `aml.screenSync` run a One-Time AML screening. The sync form returns the result directly and accepts an `idempotencyKey`.
+- `aml.monitor` submits an AML Monitoring screening, and `aml.monitoringNews` reads the news items for one person reference.
+
 ### Changed
 
 - Retries without a `Retry-After` header now start at a 500 ms backoff, up from 50 ms, to match the Go, Python and Ruby SDKs and ease load on a slow API.
+- The token for each request now takes its `product` claim from the spec's `x-smile-token-product` extension. AML requests mint a token bound to `one_time_aml` (`aml.screen`, `aml.screenSync`) or `aml` (`aml.monitor`, `aml.monitoringNews`).
 
 ## [13.0.0] - 2026-11-09
 

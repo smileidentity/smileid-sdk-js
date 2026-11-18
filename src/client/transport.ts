@@ -15,6 +15,7 @@ import {
 } from '../errors/index.js';
 import type { ResolvedConfig } from './config.js';
 import { buildMultipart, type MultipartPart, type SerializedMultipart } from '../helpers/multipart.js';
+import { productForPath } from '../generated/operations/products.js';
 import { VERSION } from '../version.js';
 
 /** HTTP statuses that are retryable for idempotent operations (spec §2.6). */
@@ -25,19 +26,6 @@ const BACKOFF_BASE_MS = 500;
 
 /** Cap on an honoured Retry-After delay (cross-SDK standard). */
 const RETRY_AFTER_CAP_SECONDS = 60;
-
-// Mirrors the API authorizer: a token bound to a product is accepted only on
-// that product's endpoint. Paths absent here mint a token with no claims.
-const PRODUCT_BY_PATH: Record<string, string> = {
-  '/v3/enhanced_kyc': 'enhanced_kyc',
-  '/v3/document_verification': 'document_verification',
-  '/v3/enhanced_document_verification': 'enhanced_document_verification',
-  '/v3/residency_document_verification': 'residency_document_verification',
-  '/v3/biometric_kyc': 'biometric_kyc',
-  '/v3/registration': 'smart_selfie_registration',
-  '/v3/authentication': 'smart_selfie_authentication',
-  '/v3/compare': 'smart_selfie_compare',
-};
 
 /** A fully-described request for {@link Transport.execute}. */
 export interface RequestPlan {
@@ -239,7 +227,7 @@ export class Transport {
    * must not reach any other call.
    */
   private async mintToken(plan: RequestPlan, useEnrolledImage: boolean): Promise<string> {
-    const product = PRODUCT_BY_PATH[plan.path];
+    const product = productForPath(plan.path);
     const userId = product === undefined ? undefined : jobUserId(plan);
     if (useEnrolledImage && userId === undefined) {
       throw new ValidationError({

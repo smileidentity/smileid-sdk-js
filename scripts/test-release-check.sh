@@ -111,6 +111,56 @@ expect_release v1.1.0 1 "#4 Break on 1.x" "#1"
 expect_release v2.9.0 0 "#4 Break on 1.x"
 expect_release not-a-tag 1 "not a vX.Y.Z tag"
 
+# --- check-release.sh, before the tag exists -----------------------------------
+# A second history, with the files the guards read:
+#   r0 (v1.0.0) - rb [breaking #7] - rr (release commit, untagged)
+rel="$work/rel"
+mkdir -p "$rel"
+cd "$rel"
+g init -q -b main
+write_release() { # <package version> <changelog heading>
+  printf '{"name": "x", "version": "%s"}\n' "$1" >package.json
+  printf '# Changelog\n\n## [Unreleased]\n\n%s\n' "$2" >CHANGELOG.md
+  g add package.json CHANGELOG.md
+}
+write_release 1.0.0 "## [1.0.0] - 2026-01-01"
+g commit -q -m r0
+g tag v1.0.0
+rb="$(commit rb)"
+write_release 2.0.0 "## [2.0.0] - 2026-02-01"
+g commit -q -m rr
+dated="$(git rev-parse HEAD)"
+write_release 2.0.0 "## [2.0.0]"
+g commit -q -m "undated heading"
+undated_rev="$(git rev-parse HEAD)"
+g checkout -q "$dated"
+rel_prs="$work/rel-prs.json"
+printf '[{"number": 7, "title": "Break seven", "mergeCommit": {"oid": "%s"}}]\n' "$rb" >"$rel_prs"
+
+# expect_check <tag> <rev> <0|1> [<text in output>]
+expect_check() {
+  local out status
+  set +e
+  out="$(BREAKING_PRS_JSON="$rel_prs" "$here/check-release.sh" "$1" "$2" 2>&1)"
+  status=$?
+  set -e
+  [ "$status" = "$3" ] || fail "check-release $1 $2: exit $status, want $3: $out"
+  if [ -n "${4:-}" ]; then
+    case "$out" in *"$4"*) ;; *) fail "check-release $1 $2: missing '$4' in: $out" ;; esac
+  fi
+}
+expect_check v2.0.0 HEAD 0 "#7 Break seven"
+# The tag must match package.json, and #7 needs a major bump.
+expect_check v1.1.0 HEAD 1 "package.json has version 2.0.0"
+expect_check v1.1.0 HEAD 1 "must bump the major version"
+expect_check v1.1.0 HEAD 1 "no dated"
+expect_check v2.0.0 "$undated_rev" 1 "no dated '## [2.0.0] - YYYY-MM-DD' heading"
+expect_check 2.0.0 HEAD 1 "is not a vX.Y.Z"
+# Without a rev, the tag is the release, so the check needs the tag to exist.
+g tag v2.0.0
+expect_check v2.0.0 v2.0.0 0 "#7 Break seven"
+cd "$repo"
+
 if [ "$failures" -ne 0 ]; then
   echo "$failures release-check test(s) failed" >&2
   exit 1
