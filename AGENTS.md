@@ -56,7 +56,7 @@ CI runs these on every pull request (`.github/workflows/quality-gates.yml`):
 
 `scripts/bump-version.sh <major|minor|patch>` sets the new version and moves the changelog's Unreleased entries under it.
 
-`release.yml` runs `scripts/check-release-breaking.sh`: a release must bump the major version if, and only if, it contains a PR labelled `breaking` (0.x to 1.0.0 needs none). Script tests run in the `scripts` job.
+`release.yml` runs `scripts/check-release.sh <tag>`. It checks that the tag matches `package.json`, that `CHANGELOG.md` has a dated `## [X.Y.Z] - YYYY-MM-DD` heading, and, through `scripts/check-release-breaking.sh`, that a release bumps the major version if, and only if, it contains a PR labelled `breaking` (0.x to 1.0.0 needs none). Tags cannot be moved, so a failed check on a pushed tag uses up that version. The `release-guards` job runs the same checks on pull requests labelled `release` or on `release/vX.Y.Z` branches, before the tag exists. Run them locally with `scripts/check-release.sh vX.Y.Z HEAD` (needs `gh`, `GH_TOKEN` and `GITHUB_REPOSITORY`). Script tests run in the `scripts` job.
 
 ## Org-wide conventions
 

@@ -21,31 +21,61 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
+      # Fails the job if the scan cannot finish or finds an ERROR-severity
+      # issue (CRITICAL or HIGH in newer rule sets). The SARIF file keeps
+      # every finding for the uploads below.
       - name: Run Semgrep
-        continue-on-error: true
-        run: semgrep scan --config p/security-audit --sarif -o semgrep.sarif
+        shell: bash
+        run: |
+          set -uo pipefail
+          status=0
+          semgrep scan --config p/security-audit \
+            --sarif-output=semgrep.sarif --json-output=semgrep.json || status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Semgrep exited with status $status, so the scan did not finish."
+            exit "$status"
+          fi
+          if ! blocking=$(python3 -c 'import json; print(sum(r["extra"].get("severity", "").upper() in {"ERROR", "CRITICAL", "HIGH"} for r in json.load(open("semgrep.json"))["results"]))'); then
+            echo "::error::Could not read Semgrep's JSON output, so the findings could not be checked."
+            exit 1
+          fi
+          if [ "$blocking" -gt 0 ]; then
+            echo "::error::Semgrep found $blocking ERROR-severity finding(s). Fix them, or add a nosemgrep comment that says why the code is safe."
+            exit 1
+          fi
+          echo "Semgrep found no ERROR-severity findings."
 
+      # The uploads never fail the job, but they warn when they do not happen.
       - name: Upload SARIF to GitHub Security
+        id: upload-sarif
         if: always()
         continue-on-error: true
         uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
           sarif_file: semgrep.sarif
 
+      - name: Warn if the SARIF upload failed
+        if: always() && steps.upload-sarif.outcome == 'failure'
+        run: echo "::warning::Could not upload semgrep.sarif to GitHub code scanning."
+
       - name: Import results into DefectDojo
         if: always()
-        continue-on-error: true
+        shell: bash
         env:
           DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
           DEFECTDOJO_API_TOKEN: ${{ secrets.DEFECTDOJO_API_TOKEN }}
           REPO_NAME: ${{ github.event.repository.name }}
           BRANCH_TAG: ${{ github.head_ref || github.ref_name }}
         run: |
-          if [ ! -s semgrep.sarif ]; then
-            echo "No semgrep.sarif file found, skipping DefectDojo import"
+          if [ -z "$DEFECTDOJO_URL" ] || [ -z "$DEFECTDOJO_API_TOKEN" ]; then
+            echo "::warning::DEFECTDOJO_URL or DEFECTDOJO_API_TOKEN is empty, so the results were not imported into DefectDojo."
             exit 0
           fi
-          curl -sS -f \
+          if [ ! -s semgrep.sarif ]; then
+            echo "::warning::There is no semgrep.sarif file, so the results were not imported into DefectDojo."
+            exit 0
+          fi
+          if ! curl -sS -f \
             -H "Authorization: Token ${DEFECTDOJO_API_TOKEN}" \
             -F "scan_type=SARIF" \
             -F "file=@semgrep.sarif" \
@@ -57,7 +87,9 @@ jobs:
             -F "deduplication_on_engagement=true" \
             -F "commit_hash=${{ github.sha }}" \
             -F "branch_tag=${BRANCH_TAG}" \
-            "${DEFECTDOJO_URL}/api/v2/reimport-scan/"
+            "${DEFECTDOJO_URL}/api/v2/reimport-scan/"; then
+            echo "::warning::Could not import the results into DefectDojo."
+          fi
 
       - name: Comment findings on PR
         if: github.event_name == 'pull_request' && always()
@@ -112,8 +144,8 @@ jobs:
               if len(findings) > 25:
                   body += f"\n*... and {len(findings) - 25} more. "
                   body += "See full results in workflow logs.*\n"
-              body += "\n> ⚠️ These findings are **non-blocking**. "
-              body += "Please review and address as appropriate.\n"
+              body += "\n> ⚠️ ERROR-severity findings fail this check. "
+              body += "Other findings are advisory: review and address them as appropriate.\n"
           else:
               body = f"{marker}\n## 🔍 Semgrep Security Scan Results\n\n"
               body += "✅ No security findings detected by "

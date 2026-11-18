@@ -25,27 +25,12 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           cache: 'npm'
 
-      - name: Verify tag matches package.json version
-        run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          PKG_VERSION="$(node -p "require('./package.json').version")"
-          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version $PKG_VERSION"
-            exit 1
-          fi
-
-      - name: Verify CHANGELOG.md has an entry for this version
-        run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          if ! grep -qF "## [${TAG_VERSION}]" CHANGELOG.md; then
-            echo "::error::CHANGELOG.md has no ## [${TAG_VERSION}] heading for tag ${GITHUB_REF_NAME}"
-            exit 1
-          fi
-
-      - name: Verify the major version matches the breaking PRs in this release
+      # The same guards run on release pull requests (quality-gates.yml), so a
+      # problem shows up before the tag is pushed and the version is used up.
+      - name: Verify the tag, package.json, CHANGELOG.md and breaking PRs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: scripts/check-release-breaking.sh "$GITHUB_REF_NAME"
+        run: scripts/check-release.sh "$GITHUB_REF_NAME"
 
       - run: npm ci
       - name: Build
@@ -59,7 +44,8 @@ jobs:
         working-directory: example
 
       - name: Update npm for trusted publishing
-        run: npm install -g npm@^11.5.1
+        # Pinned: trusted publishing needs npm 11.5.1 or later.
+        run: npm install -g npm@11.21.2
 
       - name: Publish to npm
         run: |
