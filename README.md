@@ -226,6 +226,45 @@ const accepted = await smile.biometric.compare({
 });
 ```
 
+### AML screening
+
+`aml.screen` runs a One-Time AML screening of a name against sanctions, PEP and adverse-media lists. The result arrives on your callback URL. `countries` and `fullName` are required. `aliases` takes at most 20 names and `birthYear` a four-digit year. The SDK sends the array fields as JSON strings, as the API requires.
+
+```ts
+const accepted = await smile.aml.screen({
+  countries: ['NG', 'KE'],
+  fullName: 'John Doe',
+  birthYear: '1990',
+  userDetails,
+  consent,
+});
+```
+
+`aml.screenSync` runs the same screening and returns the result in the response, so you need no callback URL. Pass an `idempotencyKey` (16 to 128 characters of `A-Z a-z 0-9 - _`) so a repeat of the call returns the original result instead of starting a second, billed screening. The call is never retried automatically. `partnerParams`, `consent`, `antifraud`, `deviceSignals` and `people` in the result keep their wire (snake_case) keys.
+
+```ts
+const result = await smile.aml.screenSync({
+  countries: ['NG'],
+  fullName: 'John Doe',
+  userDetails,
+  consent,
+  idempotencyKey: 'onboarding-8f14e45fceea167a',
+});
+console.log(result.status, result.noOfPersonsFound);
+```
+
+`aml.monitor` enrols the name for ongoing AML Monitoring. It takes the same fields as `aml.screen`, but `fullName` may be left out when `searchExistingUser` is `true`, which needs `userId`. `aml.monitoringNews` reads the news items behind one person reference in a monitoring result.
+
+```ts
+const accepted = await smile.aml.monitor({ countries: ['NG'], fullName: 'Jane Doe', userDetails, consent });
+
+const news = await smile.aml.monitoringNews(accepted.jobId!, 'ref_001', {
+  newsCategory: 'financial_crime',
+  page: 1,
+  limit: 25,
+});
+```
+
 ### Check a verification
 
 `retrieve` never throws on an unknown job: a 404 comes back as a `JobStatus` with `status: "not_found"` so polling can treat it as pending.

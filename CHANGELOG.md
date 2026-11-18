@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `aml.screen` and `aml.screenSync` run a One-Time AML screening. The sync form returns the result directly and accepts an `idempotencyKey`.
+- `aml.monitor` submits an AML Monitoring screening, and `aml.monitoringNews` reads the news items for one person reference.
+
 ### Changed
 
-- Token `product` claims now come from a table generated from the spec's `x-smile-token-product` (spec v3.1188.0). The claims sent for existing operations are unchanged.
+- The token for each request now takes its `product` claim from the spec's `x-smile-token-product` extension. AML requests mint a token bound to `one_time_aml` (`aml.screen`, `aml.screenSync`) or `aml` (`aml.monitor`, `aml.monitoringNews`).
 
 ## [13.0.0] - 2026-11-09
 

@@ -13,9 +13,9 @@ import {
   UnexpectedResponseError,
   ValidationError,
 } from '../errors/index.js';
-import { TOKEN_PRODUCT_BY_PATH } from '../generated/models/index.js';
 import type { ResolvedConfig } from './config.js';
 import { buildMultipart, type MultipartPart, type SerializedMultipart } from '../helpers/multipart.js';
+import { productForPath } from '../generated/operations/products.js';
 import { VERSION } from '../version.js';
 
 /** HTTP statuses that are retryable for idempotent operations (spec §2.6). */
@@ -227,7 +227,7 @@ export class Transport {
    * must not reach any other call.
    */
   private async mintToken(plan: RequestPlan, useEnrolledImage: boolean): Promise<string> {
-    const product = TOKEN_PRODUCT_BY_PATH[plan.path];
+    const product = productForPath(plan.path);
     const userId = product === undefined ? undefined : jobUserId(plan);
     if (useEnrolledImage && userId === undefined) {
       throw new ValidationError({
