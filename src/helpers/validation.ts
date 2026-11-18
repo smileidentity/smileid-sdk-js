@@ -8,7 +8,9 @@
 import { ValidationError } from '../errors/index.js';
 import type { BiometricKycParams } from '../client/params.js';
 import type {
+  AmlMonitoringParams,
   AuthenticationParams,
+  OneTimeAmlParams,
   ReportFraudParams,
   UserDetails,
 } from '../generated/models/index.js';
@@ -113,5 +115,26 @@ export function validateBiometricKyc(params: BiometricKycParams): void {
     throw new ValidationError({
       message: 'selfieImage and livenessImages are required unless useEnrolledImage is true.',
     });
+  }
+}
+
+/**
+ * AML screening (One-Time AML and AML Monitoring): at least one country, at most
+ * 20 aliases, a four-digit birth year, userId when searchExistingUser is true,
+ * and the usual user details.
+ */
+export function validateAml(params: OneTimeAmlParams | AmlMonitoringParams): void {
+  validateUserDetails(params.userDetails);
+  if (!Array.isArray(params.countries) || params.countries.length === 0) {
+    throw new ValidationError({ message: 'countries must contain at least one country code.' });
+  }
+  if (params.aliases !== undefined && params.aliases.length > 20) {
+    throw new ValidationError({ message: 'aliases must contain at most 20 entries.' });
+  }
+  if (params.birthYear !== undefined && !/^\d{4}$/.test(params.birthYear)) {
+    throw new ValidationError({ message: 'birthYear must be a four-digit year.' });
+  }
+  if (params.searchExistingUser === true && !params.userId) {
+    throw new ValidationError({ message: 'userId is required when searchExistingUser is true.' });
   }
 }
