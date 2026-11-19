@@ -51,8 +51,8 @@ test('computeBackoff honours Retry-After when present', () => {
 test('computeBackoff grows exponentially with jitter otherwise', () => {
   const d0 = computeBackoff(0, null);
   const d2 = computeBackoff(2, null);
-  assert.ok(d0 >= 50 && d0 < 100);
-  assert.ok(d2 >= 200 && d2 < 250);
+  assert.ok(d0 >= 500 && d0 < 1000);
+  assert.ok(d2 >= 2000 && d2 < 2500);
 });
 
 // Matrix item 3: retry policy — transport loop.

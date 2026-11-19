@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Retries without a `Retry-After` header now start at a 500 ms backoff, up from 50 ms, to match the Go, Python and Ruby SDKs and ease load on a slow API.
 - The token for each request now takes its `product` claim from the spec's `x-smile-token-product` extension. AML requests mint a token bound to `one_time_aml` (`aml.screen`, `aml.screenSync`) or `aml` (`aml.monitor`, `aml.monitoringNews`).
 
 ## [13.0.0] - 2026-11-09
