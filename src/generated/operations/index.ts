@@ -211,6 +211,21 @@ function effectiveCallback(
   return callback;
 }
 
+/**
+ * The callback URL the caller set on this call, without the client default. For sync
+ * endpoints, which ignore `callback_url`.
+ */
+function explicitCallback(
+  paramCb: string | undefined,
+  opts: RequestOptions | undefined,
+): string | undefined {
+  const callback = paramCb ?? opts?.callbackUrl;
+  if (callback !== undefined) {
+    assertHttpsUrl(callback, 'callbackUrl');
+  }
+  return callback;
+}
+
 function planExtras(opts?: RequestOptions): Pick<RequestPlan, 'timeout' | 'signal'> {
   return { timeout: opts?.timeout, signal: opts?.signal };
 }
@@ -276,7 +291,6 @@ export async function basicKyc(
     authenticated: true,
     needsPartnerIdHeader: false,
     idempotent: false,
-    headers: { 'User-ID': params.userId },
     multipart: buildMultipart(
       basicKycParts(params, effectiveCallback(params.callbackUrl, opts, transport)),
     ),
@@ -296,10 +310,7 @@ export async function basicKycSync(
     authenticated: true,
     needsPartnerIdHeader: false,
     idempotent: false, // never auto-retried: a repeat would be a second billed lookup
-    headers: { 'User-ID': params.userId },
-    multipart: buildMultipart(
-      basicKycParts(params, effectiveCallback(params.callbackUrl, opts, transport)),
-    ),
+    multipart: buildMultipart(basicKycParts(params, explicitCallback(params.callbackUrl, opts))),
     ...planExtras(opts),
   });
   return toBasicKycResult(result.json);

@@ -119,7 +119,7 @@ accepted.isAccepted; // true
 
 `basicKyc.verify` takes the same fields as `enhancedKyc.verify`. It checks the details you submit against the ID authority's record and reports a match verdict for each field. The result goes to your callback URL.
 
-`basicKyc.verifySync` returns the result in the response, so it needs no callback URL. It is never retried automatically. If it fails with a 408 or 424, read the outcome with `verifications.retrieve` instead of submitting again. `partnerParams`, `consent`, `antifraud` and `deviceSignals` in the result keep their wire (snake_case) keys.
+`basicKyc.verifySync` returns the result in the response, so it needs no callback URL. It is never retried automatically. If it fails with a 408, 424 or 500, the job may still have run. Submitting it again runs and bills a second lookup, so don't resubmit automatically. `partnerParams`, `consent`, `antifraud` and `deviceSignals` in the result keep their wire (snake_case) keys.
 
 ```ts
 const result = await smile.basicKyc.verifySync({

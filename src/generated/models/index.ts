@@ -95,11 +95,12 @@ export interface BasicKycParams extends EntryParamsBase {
   idNumber: string;
   bankCode?: string;
   operator?: string;
-  /** Sent as the User-ID header. */
-  userId?: string;
 }
 
-/** basicKyc.verifySync → POST /v3/basic_kyc/sync. The callback URL is optional: none is sent. */
+/**
+ * basicKyc.verifySync → POST /v3/basic_kyc/sync. The endpoint ignores `callback_url`, so the
+ * client's default callback URL is never sent; one is sent only if you set it on this call.
+ */
 export type BasicKycSyncParams = BasicKycParams;
 
 /** How one submitted field compared with the ID authority's record. */
@@ -135,7 +136,7 @@ export interface BasicKycResult {
   createdAt: string;
   completedAt?: string;
   product: 'basic_kyc';
-  partnerParams: Record<string, unknown> | null;
+  partnerParams?: Record<string, unknown> | null;
   /** Null when the check never produced a verdict. */
   matchResults: BasicKycMatchResults | null;
   userProvidedInfo: {
@@ -146,9 +147,9 @@ export interface BasicKycResult {
     idNumber?: string | null;
   };
   consent: Record<string, unknown>;
-  antifraud: Record<string, unknown> | null;
-  deviceSignals: Record<string, unknown> | null;
-  kycReceipt: string | null;
+  antifraud?: Record<string, unknown> | null;
+  deviceSignals?: Record<string, unknown> | null;
+  kycReceipt?: string | null;
 }
 
 /** documents.verify (spec §6.2). */
