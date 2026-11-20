@@ -88,6 +88,69 @@ export interface EnhancedKycParams extends EntryParamsBase {
   userId?: string;
 }
 
+/** basicKyc.verify → POST /v3/basic_kyc. Takes the same fields as enhancedKyc.verify. */
+export interface BasicKycParams extends EntryParamsBase {
+  country: string;
+  idType: string;
+  idNumber: string;
+  bankCode?: string;
+  operator?: string;
+  /** Sent as the User-ID header. */
+  userId?: string;
+}
+
+/** basicKyc.verifySync → POST /v3/basic_kyc/sync. The callback URL is optional: none is sent. */
+export type BasicKycSyncParams = BasicKycParams;
+
+/** How one submitted field compared with the ID authority's record. */
+export type MatchVerdict =
+  | 'exact_match'
+  | 'partial_match'
+  | 'transposed'
+  | 'no_match'
+  | 'not_provided';
+
+/** The verdict per submitted field of a Basic KYC result. There is none for the id number. */
+export interface BasicKycMatchResults {
+  overall: MatchVerdict;
+  names: MatchVerdict;
+  firstName: MatchVerdict;
+  lastName: MatchVerdict;
+  otherNames: MatchVerdict;
+  dateOfBirth: MatchVerdict;
+  gender: MatchVerdict;
+  phoneNumber: MatchVerdict;
+  secondaryIdNumber: MatchVerdict;
+}
+
+/**
+ * The terminal result of a Basic KYC verification: the body of basicKyc.verifySync and
+ * the payload the async callback delivers. `partnerParams`, `consent`, `antifraud` and
+ * `deviceSignals` hold free-form data and keep their wire keys.
+ */
+export interface BasicKycResult {
+  status: 'clear' | 'attention' | 'block' | 'error';
+  message: string;
+  reason: string | null;
+  createdAt: string;
+  completedAt?: string;
+  product: 'basic_kyc';
+  partnerParams: Record<string, unknown> | null;
+  /** Null when the check never produced a verdict. */
+  matchResults: BasicKycMatchResults | null;
+  userProvidedInfo: {
+    givenNames?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+    phoneNumber?: string | null;
+    idNumber?: string | null;
+  };
+  consent: Record<string, unknown>;
+  antifraud: Record<string, unknown> | null;
+  deviceSignals: Record<string, unknown> | null;
+  kycReceipt: string | null;
+}
+
 /** documents.verify (spec §6.2). */
 export interface DocumentVerificationParams extends EntryParamsBase {
   selfieImage: BinaryInput;

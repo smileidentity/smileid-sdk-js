@@ -77,6 +77,7 @@ const person = { userDetails, consent };
 
 const jobOperations: Record<string, (c: SmileID) => Promise<unknown>> = {
   enhanced_kyc: (c) => c.enhancedKyc.verify({ ...kycId, ...person, userId: 'user-1' }),
+  basic_kyc: (c) => c.basicKyc.verify({ ...kycId, ...person, userId: 'user-1' }),
   document_verification: (c) =>
     c.documents.verify({ ...docImages, ...person, userId: 'user-1' }),
   enhanced_document_verification: (c) =>
@@ -127,6 +128,18 @@ for (const [product, call] of Object.entries(jobOperations)) {
     assert.deepEqual(fields(req), { user_id: 'user-1', product });
   });
 }
+
+test('basicKyc.verifySync: the token binds the job user and the basic_kyc product', async () => {
+  const { fetch, requests } = routerFetch(anyResponse);
+  await new SmileID({ partnerId: '1234', apiKey: 'k', fetch }).basicKyc.verifySync({
+    ...kycId,
+    ...person,
+    userId: 'user-1',
+  });
+  const req = requests.find(isToken);
+  assert.ok(req);
+  assert.deepEqual(fields(req), { user_id: 'user-1', product: 'basic_kyc' });
+});
 
 const amlBody = { countries: ['NG'], userDetails, consent, userId: 'user-1' };
 const amlOperations: Record<string, [string, (c: SmileID) => Promise<unknown>]> = {

@@ -94,6 +94,170 @@ test('enhanced_kyc: scalar + JSON parts, User-ID header, no Partner-ID header', 
   );
 });
 
+// ---- Basic KYC ----------------------------------------------------------------
+
+const basicKycBase = {
+  country: 'NG',
+  idType: 'NIN',
+  idNumber: '12345678901',
+  userDetails,
+  consent,
+};
+
+test('basic_kyc: scalar + JSON parts, User-ID header, no Partner-ID header', async () => {
+  const { fetch, requests } = routerFetch(() => accepted202('accepted'));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const accepted = await client.basicKyc.verify({
+    ...basicKycBase,
+    bankCode: '044',
+    operator: 'MTN',
+    callbackUrl: 'https://example.com/callback',
+    partnerParams: { order_id: 'ORD-1' },
+    metadata: [{ name: 'k', value: 'v' }],
+    userId: 'user_01h8x9y2z3a4b5c6d7e8f9g0h1',
+  });
+
+  assert.equal(accepted.jobId, 'job_01h8x9y2z3a4b5c6d7e8f9g0h1');
+  assert.equal(accepted.isAccepted, true);
+
+  const req = opRequest(requests);
+  assert.equal(req.method, 'POST');
+  assert.match(req.url, /\/v3\/basic_kyc$/);
+  assert.equal(req.headers['User-ID'], 'user_01h8x9y2z3a4b5c6d7e8f9g0h1');
+  assert.equal(req.headers['SmileID-Partner-ID'], undefined);
+  assert.ok(req.headers['SmileID-Token'], 'token attached');
+  assert.match(req.headers['Content-Type'], /^multipart\/form-data; boundary=/);
+  const body = req.bodyText;
+  assert.match(body, /name="country"\r\n\r\nNG\r\n/);
+  assert.match(body, /name="id_type"\r\n\r\nNIN\r\n/);
+  assert.match(body, /name="id_number"\r\n\r\n12345678901\r\n/);
+  assert.match(body, /name="bank_code"\r\n\r\n044\r\n/);
+  assert.match(body, /name="operator"\r\n\r\nMTN\r\n/);
+  assert.match(body, /name="callback_url"\r\n\r\nhttps:\/\/example.com\/callback\r\n/);
+  assert.match(
+    body,
+    /name="user_details"\r\nContent-Type: application\/json\r\n\r\n\{"given_names":"John","last_name":"Doe","email":"john@example.com"\}\r\n/,
+  );
+  assert.match(
+    body,
+    /name="consent"\r\nContent-Type: application\/json\r\n\r\n\{"granted":true,"granted_at":"2026-03-06T12:00:00.000Z","notice_language":"EN","notice_privacy_policy_url":"https:\/\/example.com\/privacy"\}\r\n/,
+  );
+  assert.match(body, /name="partner_params"\r\nContent-Type: application\/json\r\n\r\n\{"order_id":"ORD-1"\}\r\n/);
+  assert.match(body, /name="metadata"\r\nContent-Type: application\/json\r\n\r\n\[\{"name":"k","value":"v"\}\]\r\n/);
+});
+
+test('basic_kyc: needs an email or a phone number', async () => {
+  const { fetch, requests } = routerFetch(() => accepted202('accepted'));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  const noContact = { givenNames: 'John', lastName: 'Doe' };
+  assert.throws(() => client.basicKyc.verify({ ...basicKycBase, userDetails: noContact }));
+  assert.throws(() =>
+    client.basicKyc.verifySync({ ...basicKycBase, userDetails: noContact }),
+  );
+  assert.equal(requests.length, 0);
+});
+
+const basicKycResultBody = {
+  status: 'attention',
+  message: 'Verification completed: partial match.',
+  reason: null,
+  created_at: '2026-03-10T12:00:00.000Z',
+  completed_at: '2026-03-10T12:00:04.000Z',
+  product: 'basic_kyc',
+  partner_params: { order_id: 'ORD-12345' },
+  match_results: {
+    overall: 'partial_match',
+    names: 'partial_match',
+    first_name: 'exact_match',
+    last_name: 'transposed',
+    other_names: 'not_provided',
+    date_of_birth: 'exact_match',
+    gender: 'no_match',
+    phone_number: 'exact_match',
+    secondary_id_number: 'not_provided',
+  },
+  user_provided_info: {
+    given_names: 'John',
+    last_name: 'Doe',
+    email: 'john@example.com',
+    phone_number: null,
+    id_number: '12345678901',
+  },
+  consent: { granted: true },
+  antifraud: null,
+  device_signals: { ip_address: '10.0.0.1' },
+  kyc_receipt: 'https://example.com/receipt',
+};
+
+test('basicKyc.verifySync: no callback, parses the result into the typed model', async () => {
+  const { fetch, requests } = routerFetch(() => jsonResponse(200, basicKycResultBody));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const result = await client.basicKyc.verifySync({ ...basicKycBase, userId: 'user_1' });
+
+  const req = opRequest(requests);
+  assert.equal(req.method, 'POST');
+  assert.match(req.url, /\/v3\/basic_kyc\/sync$/);
+  assert.equal(req.headers['User-ID'], 'user_1');
+  assert.equal(req.headers['SmileID-Partner-ID'], undefined);
+  assert.equal(countParts(req.bodyText, 'callback_url'), 0);
+  assert.match(req.bodyText, /name="id_number"\r\n\r\n12345678901\r\n/);
+
+  assert.equal(result.status, 'attention');
+  assert.equal(result.reason, null);
+  assert.equal(result.createdAt, '2026-03-10T12:00:00.000Z');
+  assert.equal(result.completedAt, '2026-03-10T12:00:04.000Z');
+  assert.equal(result.product, 'basic_kyc');
+  assert.deepEqual(result.matchResults, {
+    overall: 'partial_match',
+    names: 'partial_match',
+    firstName: 'exact_match',
+    lastName: 'transposed',
+    otherNames: 'not_provided',
+    dateOfBirth: 'exact_match',
+    gender: 'no_match',
+    phoneNumber: 'exact_match',
+    secondaryIdNumber: 'not_provided',
+  });
+  assert.deepEqual(result.userProvidedInfo, {
+    givenNames: 'John',
+    lastName: 'Doe',
+    email: 'john@example.com',
+    phoneNumber: null,
+    idNumber: '12345678901',
+  });
+  assert.equal(result.kycReceipt, 'https://example.com/receipt');
+  // Free-form objects keep their wire keys.
+  assert.deepEqual(result.partnerParams, { order_id: 'ORD-12345' });
+  assert.deepEqual(result.consent, { granted: true });
+  assert.equal(result.antifraud, null);
+  assert.deepEqual(result.deviceSignals, { ip_address: '10.0.0.1' });
+});
+
+test('basicKyc.verifySync: an errored job has no match results', async () => {
+  const { fetch } = routerFetch(() =>
+    jsonResponse(200, { ...basicKycResultBody, status: 'error', match_results: null }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  const result = await client.basicKyc.verifySync(basicKycBase);
+  assert.equal(result.status, 'error');
+  assert.equal(result.matchResults, null);
+});
+
+for (const [status, body] of [
+  [408, { status: 'Request Timeout', message: 'The ID authority did not respond in time.' }],
+  [424, { status: 'Failed Dependency', message: 'Unable to verify ID — ID authority unavailable.' }],
+] as const) {
+  test(`basicKyc.verifySync: is not retried after a ${status}`, async () => {
+    const { fetch, requests } = routerFetch(() => jsonResponse(status, body));
+    const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+    await assert.rejects(client.basicKyc.verifySync(basicKycBase));
+    assert.equal(requests.filter((r) => !r.url.endsWith('/v3/token')).length, 1);
+  });
+}
+
 // spec §6.2
 test('document_verification: repeated liveness_images parts, Partner-ID header, binary parts', async () => {
   const { fetch, requests } = routerFetch(() => accepted202('accepted'));
