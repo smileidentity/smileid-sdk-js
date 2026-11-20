@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [13.1.0] - 2026-11-19
+
 ### Added
 
 - `aml.screen` and `aml.screenSync` run a One-Time AML screening. The sync form returns the result directly and accepts an `idempotencyKey`.
@@ -65,7 +67,8 @@ First public release.
   401.
 - Retry policy for idempotent operations, honouring `Retry-After`.
 
-[unreleased]: https://github.com/smileidentity/smileid-sdk-js/compare/v13.0.0...HEAD
+[unreleased]: https://github.com/smileidentity/smileid-sdk-js/compare/v13.1.0...HEAD
+[13.1.0]: https://github.com/smileidentity/smileid-sdk-js/compare/v13.0.0...v13.1.0
 [13.0.0]: https://github.com/smileidentity/smileid-sdk-js/compare/v12.1.0...v13.0.0
 [12.1.0]: https://github.com/smileidentity/smileid-sdk-js/compare/v12.0.0...v12.1.0
 [12.0.0]: https://github.com/smileidentity/smileid-sdk-js/releases/tag/v12.0.0
