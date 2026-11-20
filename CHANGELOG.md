@@ -7,13 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `basicKyc.verify` and `basicKyc.verifySync` run a Basic KYC verification, which reports a match verdict for each field you submit. The sync form returns the result directly. Requests mint a token bound to the `basic_kyc` product.
+
 ## [13.1.0] - 2026-11-19
 
 ### Added
 
 - `aml.screen` and `aml.screenSync` run a One-Time AML screening. The sync form returns the result directly and accepts an `idempotencyKey`.
 - `aml.monitor` submits an AML Monitoring screening, and `aml.monitoringNews` reads the news items for one person reference.
-- `basicKyc.verify` and `basicKyc.verifySync` run a Basic KYC verification, which reports a match verdict for each field you submit. The sync form returns the result directly. Requests mint a token bound to the `basic_kyc` product.
 
 ### Changed
 
