@@ -188,19 +188,23 @@ function toOneTimeAmlResult(json: unknown, jobId: string | null): OneTimeAmlResu
 
 /**
  * Types the fields the spec documents for an Enhanced KYC result and keeps the whole body.
- * The header job id wins; the body's `job_id` is the fallback.
+ * The `SmileID-Job-ID` and `User-ID` headers win; the body's `job_id` and `user_id` are the
+ * fallbacks. A blank header counts as absent.
  */
-function toEnhancedKycResult(json: unknown, jobId: string | null): EnhancedKycResult {
+function toEnhancedKycResult(json: unknown, headers: Headers): EnhancedKycResult {
   // The transport guarantees a JSON object on success.
   const o = json as Record<string, unknown>;
   const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+  const header = (name: string): string | null => headers.get(name)?.trim() || null;
   return {
-    jobId: jobId ?? str(o.job_id),
-    userId: str(o.user_id),
+    jobId: header('smileid-job-id') ?? str(o.job_id),
+    userId: header('user-id') ?? str(o.user_id),
     status: str(o.status) ?? '',
     message: str(o.message) ?? '',
     reason: str(o.reason),
     kycReceipt: str(o.kyc_receipt),
+    responseSignature: headers.get('response-signature'),
+    responseTimestamp: headers.get('response-timestamp'),
     body: o,
   };
 }
@@ -308,7 +312,7 @@ export async function enhancedKycSync(
     multipart: buildMultipart(enhancedKycParts(params, explicitCallback(params.callbackUrl, opts))),
     ...planExtras(opts),
   });
-  return toEnhancedKycResult(result.json, result.jobId);
+  return toEnhancedKycResult(result.json, result.headers);
 }
 
 function basicKycParts(

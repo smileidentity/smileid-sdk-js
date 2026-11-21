@@ -63,6 +63,8 @@ export interface TransportResult {
   requestId: string | null;
   /** The `SmileID-Job-ID` response header, or null when the response had none. */
   jobId: string | null;
+  /** The response headers. */
+  headers: Headers;
 }
 
 /** Should this attempt be retried, given the operation and outcome (spec §2A). */
@@ -209,11 +211,18 @@ export class Transport {
             jobId,
           });
         }
-        return { statusCode: resp.status, json, rawBody, requestId, jobId };
+        return { statusCode: resp.status, json, rawBody, requestId, jobId, headers: resp.headers };
       }
 
       if (plan.allow404 && resp.status === 404) {
-        return { statusCode: resp.status, json: safeJson(rawBody), rawBody, requestId, jobId };
+        return {
+          statusCode: resp.status,
+          json: safeJson(rawBody),
+          rawBody,
+          requestId,
+          jobId,
+          headers: resp.headers,
+        };
       }
 
       if (shouldRetry(plan.idempotent, attempt, this.config.maxRetries, resp.status)) {

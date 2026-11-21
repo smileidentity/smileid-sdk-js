@@ -115,7 +115,7 @@ accepted.jobId;      // "job_..."
 accepted.isAccepted; // true
 ```
 
-`enhancedKyc.verifySync` takes the same fields and returns the result in the response, so it needs no callback URL. The result is the payload the async callback would have delivered. `result.jobId` is the Smile job id. `status`, `message`, `reason`, `userId` and `kycReceipt` are typed, and `result.body` holds the whole response body with its wire (snake_case) keys.
+`enhancedKyc.verifySync` takes the same fields and returns the result in the response, so it needs no callback URL. The result is the payload the async callback would have delivered. `result.jobId` is the Smile job id. `result.userId` comes from the `User-ID` header, or the body. `status`, `message`, `reason` and `kycReceipt` are typed, and `result.body` holds the whole response body with its wire (snake_case) keys. `result.responseSignature` and `result.responseTimestamp` carry the `Response-Signature` and `Response-Timestamp` headers, which are computed the same way as for a webhook, so you can check them with your own webhook verification code. The SDK does not check them.
 
 The call is never retried automatically. If it fails with a 408 or 424, the job is recorded and may still have run. Submitting it again runs and bills a second lookup, so don't resubmit automatically. Read the outcome with `verifications.retrieve`, using the job id on the error (`err.jobId`). Do the same for a 500 that has a job id. A 500 with no job id means the job was not created.
 
