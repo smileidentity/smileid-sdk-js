@@ -7,6 +7,7 @@ const PRODUCT_BY_PATH_TEMPLATE: Record<string, string> = {
   '/v3/basic_kyc': 'basic_kyc',
   '/v3/basic_kyc/sync': 'basic_kyc',
   '/v3/enhanced_kyc': 'enhanced_kyc',
+  '/v3/enhanced_kyc/sync': 'enhanced_kyc',
   '/v3/document_verification': 'document_verification',
   '/v3/enhanced_document_verification': 'enhanced_document_verification',
   '/v3/residency_document_verification': 'residency_document_verification',

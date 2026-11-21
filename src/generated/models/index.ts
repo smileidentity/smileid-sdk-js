@@ -88,6 +88,33 @@ export interface EnhancedKycParams extends EntryParamsBase {
   userId?: string;
 }
 
+/**
+ * enhancedKyc.verifySync → POST /v3/enhanced_kyc/sync. The endpoint ignores `callback_url`, so
+ * the client's default callback URL is never sent; one is sent only if you set it on this call.
+ */
+export type EnhancedKycSyncParams = EnhancedKycParams;
+
+/**
+ * The terminal result of an Enhanced KYC verification: the body of enhancedKyc.verifySync,
+ * which is the same payload the async callback delivers. The spec documents only a few of
+ * its fields, so those are typed here and the whole body is kept in `body` with its wire keys.
+ */
+export interface EnhancedKycResult {
+  /**
+   * The Smile job id, from the response's `SmileID-Job-ID` header, or from the body's
+   * `job_id` when the response had no header. Null when neither is present.
+   */
+  jobId: string | null;
+  userId: string | null;
+  /** The decision: `clear`, `attention`, `block` or `error`. */
+  status: string;
+  message: string;
+  reason: string | null;
+  kycReceipt: string | null;
+  /** The response body exactly as the API sent it (snake_case keys). */
+  body: Record<string, unknown>;
+}
+
 /** basicKyc.verify → POST /v3/basic_kyc. Takes the same fields as enhancedKyc.verify. */
 export interface BasicKycParams extends EntryParamsBase {
   country: string;

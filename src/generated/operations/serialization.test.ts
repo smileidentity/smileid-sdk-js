@@ -442,6 +442,243 @@ test('basicKyc.verifySync: after a 408, retrieve reads the job named by the erro
   assert.equal(status.message, 'Job completed.');
 });
 
+// ---- Enhanced KYC sync -----------------------------------------------------------
+
+const enhancedKycBase = {
+  country: 'NG',
+  idType: 'NIN',
+  idNumber: '12345678901',
+  userDetails: {
+    givenNames: 'Amina Fatou',
+    lastName: 'Clearwater',
+    email: 'amina.clearwater@example.com',
+  },
+  consent,
+};
+
+// The Clearwater persona from the shared fixtures (submitEnhancedKycSync/clearwater).
+const enhancedKycResultBody = {
+  job_id: 'job_01h8x9y2z3a4b5c6d7e8f9g0h1',
+  user_id: 'user_01h8x9y2z3a4b5c6d7e8f9g0h1',
+  status: 'clear',
+  reason: null,
+  message: 'Verification successful',
+  product: 'enhanced_kyc',
+  partner_params: { order_id: 'ORD-12345' },
+  kyc_receipt:
+    'https://portal.usesmileid.com/api/v3/001/job_result_summary/job_01h8x9y2z3a4b5c6d7e8f9g0h1/generate_v3_pdf/live?token=REDACTED',
+};
+
+test('enhancedKyc.verifySync: golden request', async () => {
+  const { fetch, requests } = routerFetch(() => jsonResponse(200, enhancedKycResultBody));
+  const client = new SmileID({
+    partnerId: '1234',
+    apiKey: 'k',
+    fetch,
+    defaultCallbackUrl: 'https://example.com/default',
+  });
+
+  await client.enhancedKyc.verifySync({
+    ...enhancedKycBase,
+    bankCode: '044',
+    operator: 'MTN',
+    partnerParams: { order_id: 'ORD-12345' },
+    metadata: [{ name: 'k', value: 'v' }],
+    userId: 'user_01h8x9y2z3a4b5c6d7e8f9g0h1',
+  });
+
+  const req = opRequest(requests);
+  assert.equal(req.method, 'POST');
+  assert.match(req.url, /\/v3\/enhanced_kyc\/sync$/);
+  assert.equal(req.headers['User-ID'], 'user_01h8x9y2z3a4b5c6d7e8f9g0h1');
+  assert.equal(req.headers['SmileID-Partner-ID'], undefined);
+  assert.equal(req.headers['SmileID-Idempotency-Key'], undefined);
+  assert.ok(req.headers['SmileID-Token'], 'token attached');
+  assert.equal(req.headers['SmileID-Source-SDK'], 'node');
+  assert.equal(req.headers['SmileID-Source-SDK-Version'], VERSION);
+  const boundary = /^multipart\/form-data; boundary=(.+)$/.exec(req.headers['Content-Type'])?.[1];
+  assert.ok(boundary, 'multipart boundary');
+
+  const text = (name: string, value: string): string =>
+    `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`;
+  const json = (name: string, value: string): string =>
+    `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\nContent-Type: application/json\r\n\r\n${value}\r\n`;
+  // The client default callback URL is never sent: the endpoint ignores it.
+  assert.equal(
+    req.bodyText,
+    text('country', 'NG') +
+      text('id_type', 'NIN') +
+      text('id_number', '12345678901') +
+      text('bank_code', '044') +
+      text('operator', 'MTN') +
+      json(
+        'user_details',
+        '{"given_names":"Amina Fatou","last_name":"Clearwater","email":"amina.clearwater@example.com"}',
+      ) +
+      json(
+        'consent',
+        '{"granted":true,"granted_at":"2026-03-06T12:00:00.000Z","notice_language":"EN","notice_privacy_policy_url":"https://example.com/privacy"}',
+      ) +
+      json('partner_params', '{"order_id":"ORD-12345"}') +
+      json('metadata', '[{"name":"k","value":"v"}]') +
+      `--${boundary}--\r\n`,
+  );
+});
+
+test('enhancedKyc.verifySync: parses the result, with the job id from the SmileID-Job-ID header', async () => {
+  const { fetch } = routerFetch(() =>
+    jsonResponse(200, enhancedKycResultBody, { 'SmileID-Job-ID': 'job_from_header' }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const result = await client.enhancedKyc.verifySync(enhancedKycBase);
+
+  assert.equal(result.jobId, 'job_from_header');
+  assert.equal(result.userId, 'user_01h8x9y2z3a4b5c6d7e8f9g0h1');
+  assert.equal(result.status, 'clear');
+  assert.equal(result.reason, null);
+  assert.equal(result.message, 'Verification successful');
+  assert.equal(result.kycReceipt, enhancedKycResultBody.kyc_receipt);
+  // The whole body is kept with its wire keys.
+  assert.deepEqual(result.body, enhancedKycResultBody);
+});
+
+test('enhancedKyc.verifySync: falls back to the body job_id when there is no header', async () => {
+  const { fetch } = routerFetch(() =>
+    jsonResponse(200, {
+      ...enhancedKycResultBody,
+      status: 'block',
+      reason: 'identifier_not_found',
+      message: 'Verification failed: Unable to validate ID - Not Found',
+    }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const result = await client.enhancedKyc.verifySync(enhancedKycBase);
+  assert.equal(result.jobId, 'job_01h8x9y2z3a4b5c6d7e8f9g0h1');
+  assert.equal(result.status, 'block');
+  assert.equal(result.reason, 'identifier_not_found');
+});
+
+test('enhancedKyc.verifySync: missing or mistyped fields fall back to defaults', async () => {
+  const { fetch } = routerFetch(() => jsonResponse(200, { status: 7, extra: { a: 1 } }));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const result = await client.enhancedKyc.verifySync(enhancedKycBase);
+  assert.deepEqual(result, {
+    jobId: null,
+    userId: null,
+    status: '',
+    message: '',
+    reason: null,
+    kycReceipt: null,
+    body: { status: 7, extra: { a: 1 } },
+  });
+});
+
+test('enhancedKyc.verifySync: sends a callback URL the caller sets explicitly', async () => {
+  const { fetch, requests } = routerFetch(() => jsonResponse(200, enhancedKycResultBody));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  await client.enhancedKyc.verifySync({ ...enhancedKycBase, callbackUrl: 'https://example.com/param' });
+  await client.enhancedKyc.verifySync(enhancedKycBase, { callbackUrl: 'https://example.com/option' });
+  const [fromParams, fromOptions] = requests.filter((r) => !r.url.endsWith('/v3/token'));
+  assert.match(fromParams!.bodyText, /name="callback_url"\r\n\r\nhttps:\/\/example.com\/param\r\n/);
+  assert.match(fromOptions!.bodyText, /name="callback_url"\r\n\r\nhttps:\/\/example.com\/option\r\n/);
+  assert.equal(countParts(fromParams!.bodyText, 'callback_url'), 1);
+});
+
+test('enhancedKyc.verifySync: needs an email or a phone number', async () => {
+  const { fetch, requests } = routerFetch(() => jsonResponse(200, enhancedKycResultBody));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  assert.throws(() =>
+    client.enhancedKyc.verifySync({
+      ...enhancedKycBase,
+      userDetails: { givenNames: 'Amina', lastName: 'Clearwater' },
+    }),
+  );
+  assert.equal(requests.length, 0);
+});
+
+for (const [status, ErrorClass, body] of [
+  [408, InvalidRequestError, { status: 'Request Timeout', message: 'The ID authority did not respond in time.' }],
+  [424, InvalidRequestError, { status: 'Failed Dependency', message: 'Unable to verify ID — ID authority unavailable.' }],
+  [500, APIError, { status: 'Internal Server Error', message: 'Something went wrong.' }],
+] as const) {
+  test(`enhancedKyc.verifySync: is not retried after a ${status}, and the error has the job id`, async () => {
+    const { fetch, requests } = routerFetch(() =>
+      jsonResponse(status, body, { 'SmileID-Job-ID': 'job_recorded' }),
+    );
+    const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch, maxRetries: 3 });
+
+    await assert.rejects(client.enhancedKyc.verifySync(enhancedKycBase), (err: unknown) => {
+      assert.ok(err instanceof ErrorClass);
+      assert.equal(err.statusCode, status);
+      assert.equal(err.status, body.status);
+      assert.equal(err.jobId, 'job_recorded');
+      return true;
+    });
+    assert.equal(requests.filter((r) => !r.url.endsWith('/v3/token')).length, 1);
+  });
+}
+
+test('enhancedKyc.verifySync: a 500 without a SmileID-Job-ID header has no job id', async () => {
+  const { fetch } = routerFetch(() => jsonResponse(500, { message: 'Internal server error' }));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  await assert.rejects(client.enhancedKyc.verifySync(enhancedKycBase), (err: unknown) => {
+    assert.ok(err instanceof APIError);
+    assert.equal(err.jobId, null);
+    return true;
+  });
+});
+
+// The README's advice for a sync 408: read the job's outcome with
+// verifications.retrieve, using the job id from the error, rather than resubmit.
+test('enhancedKyc.verifySync: after a 408, retrieve reads the job named by the error', async () => {
+  const { fetch, requests } = routerFetch((req) => {
+    if (req.url.endsWith('/v3/enhanced_kyc/sync')) {
+      return jsonResponse(
+        408,
+        {
+          status: 'Request Timeout',
+          message:
+            'The ID authority did not respond in time. The job is still recorded — retrieve its result from /v3/status/{job_id}.',
+        },
+        { 'SmileID-Job-ID': 'job_01h8x9y2z3a4b5c6d7e8f9g0h1' },
+      );
+    }
+    return jsonResponse(200, {
+      status: 'clear',
+      job_id: 'job_01h8x9y2z3a4b5c6d7e8f9g0h1',
+      user_id: 'user_01h8x9y2z3a4b5c6d7e8f9g0h1',
+      message: 'Job completed',
+    });
+  });
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  let jobId: string | null = null;
+  try {
+    await client.enhancedKyc.verifySync(enhancedKycBase);
+    assert.fail('expected verifySync to raise');
+  } catch (err) {
+    assert.ok(err instanceof InvalidRequestError);
+    jobId = err.jobId;
+  }
+  assert.ok(jobId);
+  const status = await client.verifications.retrieve(jobId);
+
+  const ops = requests.filter((r) => !r.url.endsWith('/v3/token'));
+  assert.equal(ops.length, 2);
+  assert.match(ops[0]!.url, /\/v3\/enhanced_kyc\/sync$/);
+  assert.equal(ops[1]!.method, 'GET');
+  assert.match(ops[1]!.url, /\/v3\/status\/job_01h8x9y2z3a4b5c6d7e8f9g0h1$/);
+  assert.equal(status.status, 'clear');
+  assert.equal(status.isComplete, true);
+  assert.equal(status.jobId, 'job_01h8x9y2z3a4b5c6d7e8f9g0h1');
+  assert.equal(status.message, 'Job completed');
+});
+
 // spec §6.2
 test('document_verification: repeated liveness_images parts, Partner-ID header, binary parts', async () => {
   const { fetch, requests } = routerFetch(() => accepted202('accepted'));

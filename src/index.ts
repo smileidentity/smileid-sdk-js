@@ -39,6 +39,8 @@ export type {
   AmlMonitoringNewsResponse,
   AmlNewsCategory,
   EnhancedKycParams,
+  EnhancedKycResult,
+  EnhancedKycSyncParams,
   BasicKycMatchResults,
   BasicKycParams,
   BasicKycResult,
