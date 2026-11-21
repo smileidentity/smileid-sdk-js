@@ -31,6 +31,8 @@ import {
   type EnhancedDocumentVerificationParams,
   type ResidencyDocumentVerificationParams,
   type EnhancedKycParams,
+  type EnhancedKycResult,
+  type EnhancedKycSyncParams,
   type IdStatusParams,
   type IdStatusResponse,
   type MetadataItem,
@@ -184,6 +186,29 @@ function toOneTimeAmlResult(json: unknown, jobId: string | null): OneTimeAmlResu
   } as OneTimeAmlResult;
 }
 
+/**
+ * Types the fields the spec documents for an Enhanced KYC result and keeps the whole body.
+ * The `SmileID-Job-ID` and `User-ID` headers win; the body's `job_id` and `user_id` are the
+ * fallbacks. A blank header counts as absent.
+ */
+function toEnhancedKycResult(json: unknown, headers: Headers): EnhancedKycResult {
+  // The transport guarantees a JSON object on success.
+  const o = json as Record<string, unknown>;
+  const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+  const header = (name: string): string | null => headers.get(name)?.trim() || null;
+  return {
+    jobId: header('smileid-job-id') ?? str(o.job_id),
+    userId: header('user-id') ?? str(o.user_id),
+    status: str(o.status) ?? '',
+    message: str(o.message) ?? '',
+    reason: str(o.reason),
+    kycReceipt: str(o.kyc_receipt),
+    responseSignature: headers.get('response-signature'),
+    responseTimestamp: headers.get('response-timestamp'),
+    body: o,
+  };
+}
+
 /** Camelizes the typed envelope of a Basic KYC result; free-form objects keep their wire keys. */
 function toBasicKycResult(json: unknown, jobId: string | null): BasicKycResult {
   // The transport guarantees a JSON object on success.
@@ -234,23 +259,29 @@ function planExtras(opts?: RequestOptions): Pick<RequestPlan, 'timeout' | 'signa
 
 // ---- entry endpoints -------------------------------------------------------
 
-export async function enhancedKyc(
-  transport: Transport,
+function enhancedKycParts(
   params: EnhancedKycParams,
-  opts?: RequestOptions,
-): Promise<AcceptedResponse> {
-  const parts: MultipartPart[] = [
+  callbackUrl: string | undefined,
+): MultipartPart[] {
+  return [
     ...scalar('country', params.country),
     ...scalar('id_type', params.idType),
     ...scalar('id_number', params.idNumber),
     ...scalar('bank_code', params.bankCode),
     ...scalar('operator', params.operator),
-    ...scalar('callback_url', effectiveCallback(params.callbackUrl, opts, transport)),
+    ...scalar('callback_url', callbackUrl),
     ...jsonPart('user_details', userDetailsJson(params.userDetails)),
     ...jsonPart('consent', consentJson(params.consent)),
     ...optionalJson('partner_params', params.partnerParams),
     ...optionalJson('metadata', params.metadata),
   ];
+}
+
+export async function enhancedKyc(
+  transport: Transport,
+  params: EnhancedKycParams,
+  opts?: RequestOptions,
+): Promise<AcceptedResponse> {
   const result = await transport.execute({
     method: 'POST',
     path: '/v3/enhanced_kyc',
@@ -258,10 +289,30 @@ export async function enhancedKyc(
     needsPartnerIdHeader: false,
     idempotent: false,
     headers: { 'User-ID': params.userId },
-    multipart: buildMultipart(parts),
+    multipart: buildMultipart(
+      enhancedKycParts(params, effectiveCallback(params.callbackUrl, opts, transport)),
+    ),
     ...planExtras(opts),
   });
   return toAccepted(result.json);
+}
+
+export async function enhancedKycSync(
+  transport: Transport,
+  params: EnhancedKycSyncParams,
+  opts?: RequestOptions,
+): Promise<EnhancedKycResult> {
+  const result = await transport.execute({
+    method: 'POST',
+    path: '/v3/enhanced_kyc/sync',
+    authenticated: true,
+    needsPartnerIdHeader: false,
+    idempotent: false, // never auto-retried: a repeat would be a second billed lookup
+    headers: { 'User-ID': params.userId },
+    multipart: buildMultipart(enhancedKycParts(params, explicitCallback(params.callbackUrl, opts))),
+    ...planExtras(opts),
+  });
+  return toEnhancedKycResult(result.json, result.headers);
 }
 
 function basicKycParts(

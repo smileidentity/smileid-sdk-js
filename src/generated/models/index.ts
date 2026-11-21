@@ -88,6 +88,41 @@ export interface EnhancedKycParams extends EntryParamsBase {
   userId?: string;
 }
 
+/**
+ * enhancedKyc.verifySync → POST /v3/enhanced_kyc/sync. The endpoint ignores `callback_url`, so
+ * the client's default callback URL is never sent; one is sent only if you set it on this call.
+ */
+export type EnhancedKycSyncParams = EnhancedKycParams;
+
+/**
+ * The terminal result of an Enhanced KYC verification: the body of enhancedKyc.verifySync,
+ * which is the same payload the async callback delivers. The spec documents only a few of
+ * its fields, so those are typed here and the whole body is kept in `body` with its wire keys.
+ */
+export interface EnhancedKycResult {
+  /**
+   * The Smile job id, from the response's `SmileID-Job-ID` header, or from the body's
+   * `job_id` when the response had no header. Null when neither is present.
+   */
+  jobId: string | null;
+  /** From the response's `User-ID` header, or from the body's `user_id`. Null when neither is present. */
+  userId: string | null;
+  /** The decision: `clear`, `attention`, `block` or `error`. */
+  status: string;
+  message: string;
+  reason: string | null;
+  kycReceipt: string | null;
+  /**
+   * The `Response-Signature` header, or null when absent. It is computed the same way as a
+   * webhook signature, so your webhook verification code can check it. The SDK does not.
+   */
+  responseSignature: string | null;
+  /** The `Response-Timestamp` header the signature was computed against, or null when absent. */
+  responseTimestamp: string | null;
+  /** The response body exactly as the API sent it (snake_case keys), including untyped fields. */
+  body: Record<string, unknown>;
+}
+
 /** basicKyc.verify → POST /v3/basic_kyc. Takes the same fields as enhancedKyc.verify. */
 export interface BasicKycParams extends EntryParamsBase {
   country: string;
