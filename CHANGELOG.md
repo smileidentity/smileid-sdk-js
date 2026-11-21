@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `basicKyc.verify` and `basicKyc.verifySync` run a Basic KYC verification, which reports a match verdict for each field you submit. The sync form returns the result directly. Requests mint a token bound to the `basic_kyc` product.
+
 ## [13.1.0] - 2026-11-19
 
 ### Added

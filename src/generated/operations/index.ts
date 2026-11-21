@@ -21,6 +21,9 @@ import {
   type AuthenticationParams,
   type BankCodesParams,
   type BankCodesResponse,
+  type BasicKycParams,
+  type BasicKycResult,
+  type BasicKycSyncParams,
   type BiometricKycParams,
   type CompareParams,
   type Consent,
@@ -180,6 +183,20 @@ function toOneTimeAmlResult(json: unknown): OneTimeAmlResult {
   } as OneTimeAmlResult;
 }
 
+/** Camelizes the typed envelope of a Basic KYC result; free-form objects keep their wire keys. */
+function toBasicKycResult(json: unknown): BasicKycResult {
+  // The transport guarantees a JSON object on success.
+  const o = json as Record<string, unknown>;
+  const { partner_params, consent, antifraud, device_signals, ...typed } = o;
+  return {
+    ...(camelizeKeys(typed) as object),
+    partnerParams: partner_params,
+    consent,
+    antifraud,
+    deviceSignals: device_signals,
+  } as BasicKycResult;
+}
+
 function effectiveCallback(
   paramCb: string | undefined,
   opts: RequestOptions | undefined,
@@ -188,6 +205,21 @@ function effectiveCallback(
   const callback = paramCb ?? opts?.callbackUrl ?? transport.defaultCallbackUrl ?? undefined;
   // Fleet standard: callback URLs must be https; checked before any request
   // (including the token fetch) is made.
+  if (callback !== undefined) {
+    assertHttpsUrl(callback, 'callbackUrl');
+  }
+  return callback;
+}
+
+/**
+ * The callback URL the caller set on this call, without the client default. For sync
+ * endpoints, which ignore `callback_url`.
+ */
+function explicitCallback(
+  paramCb: string | undefined,
+  opts: RequestOptions | undefined,
+): string | undefined {
+  const callback = paramCb ?? opts?.callbackUrl;
   if (callback !== undefined) {
     assertHttpsUrl(callback, 'callbackUrl');
   }
@@ -228,6 +260,60 @@ export async function enhancedKyc(
     ...planExtras(opts),
   });
   return toAccepted(result.json);
+}
+
+function basicKycParts(
+  params: BasicKycParams,
+  callbackUrl: string | undefined,
+): MultipartPart[] {
+  return [
+    ...scalar('country', params.country),
+    ...scalar('id_type', params.idType),
+    ...scalar('id_number', params.idNumber),
+    ...scalar('bank_code', params.bankCode),
+    ...scalar('operator', params.operator),
+    ...scalar('callback_url', callbackUrl),
+    ...jsonPart('user_details', userDetailsJson(params.userDetails)),
+    ...jsonPart('consent', consentJson(params.consent)),
+    ...optionalJson('partner_params', params.partnerParams),
+    ...optionalJson('metadata', params.metadata),
+  ];
+}
+
+export async function basicKyc(
+  transport: Transport,
+  params: BasicKycParams,
+  opts?: RequestOptions,
+): Promise<AcceptedResponse> {
+  const result = await transport.execute({
+    method: 'POST',
+    path: '/v3/basic_kyc',
+    authenticated: true,
+    needsPartnerIdHeader: false,
+    idempotent: false,
+    multipart: buildMultipart(
+      basicKycParts(params, effectiveCallback(params.callbackUrl, opts, transport)),
+    ),
+    ...planExtras(opts),
+  });
+  return toAccepted(result.json);
+}
+
+export async function basicKycSync(
+  transport: Transport,
+  params: BasicKycSyncParams,
+  opts?: RequestOptions,
+): Promise<BasicKycResult> {
+  const result = await transport.execute({
+    method: 'POST',
+    path: '/v3/basic_kyc/sync',
+    authenticated: true,
+    needsPartnerIdHeader: false,
+    idempotent: false, // never auto-retried: a repeat would be a second billed lookup
+    multipart: buildMultipart(basicKycParts(params, explicitCallback(params.callbackUrl, opts))),
+    ...planExtras(opts),
+  });
+  return toBasicKycResult(result.json);
 }
 
 export async function documentVerification(

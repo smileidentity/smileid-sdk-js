@@ -128,6 +128,22 @@ for (const [product, call] of Object.entries(jobOperations)) {
   });
 }
 
+// Basic KYC takes no user id, so its token binds only the product.
+const basicKycOperations: Record<string, (c: SmileID) => Promise<unknown>> = {
+  'basicKyc.verify': (c) => c.basicKyc.verify({ ...kycId, ...person }),
+  'basicKyc.verifySync': (c) => c.basicKyc.verifySync({ ...kycId, ...person }),
+};
+
+for (const [name, call] of Object.entries(basicKycOperations)) {
+  test(`${name}: the token binds the basic_kyc product and no user`, async () => {
+    const { fetch, requests } = routerFetch(anyResponse);
+    await call(new SmileID({ partnerId: '1234', apiKey: 'k', fetch }));
+    const req = requests.find(isToken);
+    assert.ok(req);
+    assert.deepEqual(fields(req), { product: 'basic_kyc' });
+  });
+}
+
 const amlBody = { countries: ['NG'], userDetails, consent, userId: 'user-1' };
 const amlOperations: Record<string, [string, (c: SmileID) => Promise<unknown>]> = {
   'aml.screen': ['one_time_aml', (c) => c.aml.screen({ ...amlBody, fullName: 'John Doe' })],

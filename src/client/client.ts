@@ -27,6 +27,9 @@ import type {
   AuthenticationParams,
   BankCodesParams,
   BankCodesResponse,
+  BasicKycParams,
+  BasicKycResult,
+  BasicKycSyncParams,
   ClearFraudParams,
   CompareParams,
   DocumentVerificationParams,
@@ -58,6 +61,12 @@ export class SmileID {
   /** enhanced_kyc (spec §6.1). */
   readonly enhancedKyc: {
     verify(params: EnhancedKycParams, options?: RequestOptions): Promise<AcceptedResponse>;
+  };
+
+  /** Basic KYC: match verdicts per submitted field. */
+  readonly basicKyc: {
+    verify(params: BasicKycParams, options?: RequestOptions): Promise<AcceptedResponse>;
+    verifySync(params: BasicKycSyncParams, options?: RequestOptions): Promise<BasicKycResult>;
   };
 
   /** Document verification (spec §6.2, §6.3). */
@@ -156,6 +165,17 @@ export class SmileID {
       verify: (params, options) => {
         validateUserDetails(params.userDetails);
         return ops.enhancedKyc(t, params, options);
+      },
+    };
+
+    this.basicKyc = {
+      verify: (params, options) => {
+        validateUserDetails(params.userDetails);
+        return ops.basicKyc(t, params, options);
+      },
+      verifySync: (params, options) => {
+        validateUserDetails(params.userDetails);
+        return ops.basicKycSync(t, params, options);
       },
     };
 
