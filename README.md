@@ -134,8 +134,12 @@ try {
   });
   console.log(result.jobId, result.status, result.matchResults?.overall);
 } catch (err) {
-  if (err instanceof SmileIDError && err.jobId) {
-    // 408, 424 or 500 after the job was created: read its outcome, don't resubmit.
+  if (
+    err instanceof SmileIDError &&
+    (err.statusCode === 408 || err.statusCode === 424 || err.statusCode === 500) &&
+    err.jobId
+  ) {
+    // The job was created: read its outcome, don't resubmit.
     const status = await smile.verifications.retrieve(err.jobId);
     console.log(status.status);
   } else {

@@ -193,7 +193,8 @@ export class Transport {
       const rawBody = await resp.text();
       const requestId = resp.headers.get('x-request-id');
       // Headers.get is case-insensitive, so any casing of the header matches.
-      const jobId = resp.headers.get('smileid-job-id');
+      // A blank value names no job, so it counts as absent.
+      const jobId = resp.headers.get('smileid-job-id')?.trim() || null;
 
       if (resp.status >= 200 && resp.status < 300) {
         const json = safeJson(rawBody);

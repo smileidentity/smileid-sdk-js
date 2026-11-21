@@ -351,6 +351,44 @@ for (const header of ['SmileID-Job-ID', 'smileid-job-id', 'SMILEID-JOB-ID']) {
   });
 }
 
+test('basicKyc.verifySync: a blank SmileID-Job-ID header on a 200 gives no job id', async () => {
+  const { fetch } = routerFetch(() =>
+    jsonResponse(200, basicKycResultBody, { 'SmileID-Job-ID': '   ' }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const result = await client.basicKyc.verifySync(basicKycBase);
+  assert.equal(result.jobId, null);
+});
+
+test('basicKyc.verifySync: a padded SmileID-Job-ID header is trimmed', async () => {
+  const { fetch } = routerFetch(() =>
+    jsonResponse(200, basicKycResultBody, { 'SmileID-Job-ID': '  job_padded ' }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const result = await client.basicKyc.verifySync(basicKycBase);
+  assert.equal(result.jobId, 'job_padded');
+});
+
+test('basicKyc.verifySync: a blank SmileID-Job-ID header on a 408 gives no job id', async () => {
+  const { fetch } = routerFetch(() =>
+    jsonResponse(
+      408,
+      { status: 'Request Timeout', message: 'The ID authority did not respond in time.' },
+      { 'SmileID-Job-ID': ' \t ' },
+    ),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  await assert.rejects(client.basicKyc.verifySync(basicKycBase), (err: unknown) => {
+    assert.ok(err instanceof InvalidRequestError);
+    assert.equal(err.statusCode, 408);
+    assert.equal(err.jobId, null);
+    return true;
+  });
+});
+
 test('basicKyc.verifySync: a 500 without a SmileID-Job-ID header has no job id', async () => {
   const { fetch } = routerFetch(() => jsonResponse(500, { message: 'Internal server error' }));
   const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
