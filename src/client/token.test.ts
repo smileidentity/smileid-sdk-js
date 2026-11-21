@@ -128,6 +128,15 @@ for (const [product, call] of Object.entries(jobOperations)) {
   });
 }
 
+test('enhancedKyc.verifySync: the token binds the job user and the enhanced_kyc product', async () => {
+  const { fetch, requests } = routerFetch(anyResponse);
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  await client.enhancedKyc.verifySync({ ...kycId, ...person, userId: 'user-1' });
+  const req = requests.find(isToken);
+  assert.ok(req);
+  assert.deepEqual(fields(req), { user_id: 'user-1', product: 'enhanced_kyc' });
+});
+
 // Basic KYC takes no user id, so its token binds only the product.
 const basicKycOperations: Record<string, (c: SmileID) => Promise<unknown>> = {
   'basicKyc.verify': (c) => c.basicKyc.verify({ ...kycId, ...person }),

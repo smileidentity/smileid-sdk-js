@@ -36,6 +36,8 @@ import type {
   EnhancedDocumentVerificationParams,
   ResidencyDocumentVerificationParams,
   EnhancedKycParams,
+  EnhancedKycResult,
+  EnhancedKycSyncParams,
   FlagFraudParams,
   IdStatusParams,
   IdStatusResponse,
@@ -61,6 +63,10 @@ export class SmileID {
   /** enhanced_kyc (spec §6.1). */
   readonly enhancedKyc: {
     verify(params: EnhancedKycParams, options?: RequestOptions): Promise<AcceptedResponse>;
+    verifySync(
+      params: EnhancedKycSyncParams,
+      options?: RequestOptions,
+    ): Promise<EnhancedKycResult>;
   };
 
   /** Basic KYC: match verdicts per submitted field. */
@@ -165,6 +171,10 @@ export class SmileID {
       verify: (params, options) => {
         validateUserDetails(params.userDetails);
         return ops.enhancedKyc(t, params, options);
+      },
+      verifySync: (params, options) => {
+        validateUserDetails(params.userDetails);
+        return ops.enhancedKycSync(t, params, options);
       },
     };
 
