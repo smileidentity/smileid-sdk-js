@@ -82,3 +82,21 @@ test('every error is an instanceof SmileIDError with the right name', () => {
   assert.ok(err instanceof Error);
   assert.equal(err.name, 'AuthenticationError');
 });
+
+test('parseError carries the job id from the SmileID-Job-ID header', () => {
+  const err = parseError({
+    statusCode: 408,
+    rawBody: JSON.stringify({ status: 'Request Timeout', message: 'Timed out.' }),
+    requestId: null,
+    jobId: 'job_408',
+  });
+  assert.ok(err instanceof InvalidRequestError);
+  assert.equal(err.jobId, 'job_408');
+});
+
+test('parseError leaves jobId null when the response had no job id', () => {
+  const err = parseError({ statusCode: 500, rawBody: null, requestId: null });
+  assert.ok(err instanceof APIError);
+  assert.equal(err.jobId, null);
+  assert.equal(new SmileIDError({ message: 'local' }).jobId, null);
+});

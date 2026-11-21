@@ -76,13 +76,17 @@ test('an http callbackUrl in request options raises ValidationError', async () =
 });
 
 // Fleet standard: a 2xx body that is not a JSON object raises
-// UnexpectedResponseError with statusCode, rawBody and requestId populated.
+// UnexpectedResponseError with statusCode, rawBody, requestId and jobId populated.
 test('a non-JSON 2xx body raises UnexpectedResponseError', async () => {
   const { fetch } = routerFetch(
     () =>
       new Response('<html>gateway</html>', {
         status: 200,
-        headers: { 'content-type': 'text/html', 'x-request-id': 'req_42' },
+        headers: {
+          'content-type': 'text/html',
+          'x-request-id': 'req_42',
+          'smileid-job-id': 'job_42',
+        },
       }),
   );
   const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
@@ -93,6 +97,7 @@ test('a non-JSON 2xx body raises UnexpectedResponseError', async () => {
       assert.equal(err.statusCode, 200);
       assert.equal(err.rawBody, '<html>gateway</html>');
       assert.equal(err.requestId, 'req_42');
+      assert.equal(err.jobId, 'job_42');
       return true;
     },
   );

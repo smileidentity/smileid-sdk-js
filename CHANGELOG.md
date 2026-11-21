@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `basicKyc.verify` and `basicKyc.verifySync` run a Basic KYC verification, which reports a match verdict for each field you submit. The sync form returns the result directly. Requests mint a token bound to the `basic_kyc` product.
+- Every `SmileIDError` raised from an HTTP response now has `jobId`, read from the `SmileID-Job-ID` response header, or null when the response had none. When `basicKyc.verifySync` fails with a 408, 424 or 500 that has a job id, read the job's outcome with `verifications.retrieve(err.jobId)` instead of resubmitting.
+- `BasicKycResult` and `OneTimeAmlResult` have `jobId`, the Smile job id from the `SmileID-Job-ID` response header of `basicKyc.verifySync` and `aml.screenSync`.
 
 ## [13.1.0] - 2026-11-19
 
