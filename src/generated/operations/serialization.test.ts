@@ -525,39 +525,58 @@ test('enhancedKyc.verifySync: golden request', async () => {
   );
 });
 
-test('enhancedKyc.verifySync: parses the result, with the job id from the SmileID-Job-ID header', async () => {
+test('enhancedKyc.verifySync: parses the result; headers beat the body for job and user ids', async () => {
   const { fetch } = routerFetch(() =>
-    jsonResponse(200, enhancedKycResultBody, { 'SmileID-Job-ID': 'job_from_header' }),
+    jsonResponse(200, enhancedKycResultBody, {
+      'SmileID-Job-ID': 'job_from_header',
+      'User-ID': 'user_from_header',
+      'response-signature': 'c2lnbmF0dXJl',
+      'response-timestamp': '2026-11-20T12:00:00.000Z',
+    }),
   );
   const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
 
   const result = await client.enhancedKyc.verifySync(enhancedKycBase);
 
   assert.equal(result.jobId, 'job_from_header');
-  assert.equal(result.userId, 'user_01h8x9y2z3a4b5c6d7e8f9g0h1');
+  assert.equal(result.userId, 'user_from_header');
   assert.equal(result.status, 'clear');
   assert.equal(result.reason, null);
   assert.equal(result.message, 'Verification successful');
   assert.equal(result.kycReceipt, enhancedKycResultBody.kyc_receipt);
-  // The whole body is kept with its wire keys.
+  assert.equal(result.responseSignature, 'c2lnbmF0dXJl');
+  assert.equal(result.responseTimestamp, '2026-11-20T12:00:00.000Z');
+  // The whole body is kept with its wire keys, untyped fields included.
   assert.deepEqual(result.body, enhancedKycResultBody);
+  assert.deepEqual(result.body.partner_params, { order_id: 'ORD-12345' });
+  assert.equal(result.body.product, 'enhanced_kyc');
 });
 
-test('enhancedKyc.verifySync: falls back to the body job_id when there is no header', async () => {
-  const { fetch } = routerFetch(() =>
-    jsonResponse(200, {
-      ...enhancedKycResultBody,
-      status: 'block',
-      reason: 'identifier_not_found',
-      message: 'Verification failed: Unable to validate ID - Not Found',
-    }),
-  );
-  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+test('enhancedKyc.verifySync: falls back to the body ids when the headers are absent or blank', async () => {
+  const cases: Record<string, string>[] = [{}, { 'SmileID-Job-ID': '  ', 'User-ID': ' \t ' }];
+  for (const headers of cases) {
+    const { fetch } = routerFetch(() =>
+      jsonResponse(
+        200,
+        {
+          ...enhancedKycResultBody,
+          status: 'block',
+          reason: 'identifier_not_found',
+          message: 'Verification failed: Unable to validate ID - Not Found',
+        },
+        headers,
+      ),
+    );
+    const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
 
-  const result = await client.enhancedKyc.verifySync(enhancedKycBase);
-  assert.equal(result.jobId, 'job_01h8x9y2z3a4b5c6d7e8f9g0h1');
-  assert.equal(result.status, 'block');
-  assert.equal(result.reason, 'identifier_not_found');
+    const result = await client.enhancedKyc.verifySync(enhancedKycBase);
+    assert.equal(result.jobId, 'job_01h8x9y2z3a4b5c6d7e8f9g0h1');
+    assert.equal(result.userId, 'user_01h8x9y2z3a4b5c6d7e8f9g0h1');
+    assert.equal(result.status, 'block');
+    assert.equal(result.reason, 'identifier_not_found');
+    assert.equal(result.responseSignature, null);
+    assert.equal(result.responseTimestamp, null);
+  }
 });
 
 test('enhancedKyc.verifySync: missing or mistyped fields fall back to defaults', async () => {
@@ -572,6 +591,8 @@ test('enhancedKyc.verifySync: missing or mistyped fields fall back to defaults',
     message: '',
     reason: null,
     kycReceipt: null,
+    responseSignature: null,
+    responseTimestamp: null,
     body: { status: 7, extra: { a: 1 } },
   });
 });

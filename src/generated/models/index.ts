@@ -105,13 +105,21 @@ export interface EnhancedKycResult {
    * `job_id` when the response had no header. Null when neither is present.
    */
   jobId: string | null;
+  /** From the response's `User-ID` header, or from the body's `user_id`. Null when neither is present. */
   userId: string | null;
   /** The decision: `clear`, `attention`, `block` or `error`. */
   status: string;
   message: string;
   reason: string | null;
   kycReceipt: string | null;
-  /** The response body exactly as the API sent it (snake_case keys). */
+  /**
+   * The `Response-Signature` header, or null when absent. It is computed the same way as a
+   * webhook signature, so your webhook verification code can check it. The SDK does not.
+   */
+  responseSignature: string | null;
+  /** The `Response-Timestamp` header the signature was computed against, or null when absent. */
+  responseTimestamp: string | null;
+  /** The response body exactly as the API sent it (snake_case keys), including untyped fields. */
   body: Record<string, unknown>;
 }
 
