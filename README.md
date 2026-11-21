@@ -119,17 +119,29 @@ accepted.isAccepted; // true
 
 `basicKyc.verify` takes the same fields as `enhancedKyc.verify`. It checks the details you submit against the ID authority's record and reports a match verdict for each field. The result goes to your callback URL.
 
-`basicKyc.verifySync` returns the result in the response, so it needs no callback URL. It is never retried automatically. If it fails with a 408, 424 or 500, the job may still have run. Submitting it again runs and bills a second lookup, so don't resubmit automatically. `partnerParams`, `consent`, `antifraud` and `deviceSignals` in the result keep their wire (snake_case) keys.
+`basicKyc.verifySync` returns the result in the response, so it needs no callback URL. `result.jobId` is the Smile job id. `partnerParams`, `consent`, `antifraud` and `deviceSignals` in the result keep their wire (snake_case) keys.
+
+The call is never retried automatically. If it fails with a 408 or 424, the job is recorded and may still have run. Submitting it again runs and bills a second lookup, so don't resubmit automatically. Read the outcome with `verifications.retrieve`, using the job id on the error (`err.jobId`). Do the same for a 500 that has a job id. A 500 with no job id means the job was not created.
 
 ```ts
-const result = await smile.basicKyc.verifySync({
-  country: 'NG',
-  idType: 'NIN',
-  idNumber: '12345678901',
-  userDetails,
-  consent,
-});
-console.log(result.status, result.matchResults?.overall);
+try {
+  const result = await smile.basicKyc.verifySync({
+    country: 'NG',
+    idType: 'NIN',
+    idNumber: '12345678901',
+    userDetails,
+    consent,
+  });
+  console.log(result.jobId, result.status, result.matchResults?.overall);
+} catch (err) {
+  if (err instanceof SmileIDError && err.jobId) {
+    // 408, 424 or 500 after the job was created: read its outcome, don't resubmit.
+    const status = await smile.verifications.retrieve(err.jobId);
+    console.log(status.status);
+  } else {
+    throw err;
+  }
+}
 ```
 
 ### Document verification
@@ -257,7 +269,9 @@ const accepted = await smile.aml.screen({
 });
 ```
 
-`aml.screenSync` runs the same screening and returns the result in the response, so you need no callback URL. Pass an `idempotencyKey` (16 to 128 characters of `A-Z a-z 0-9 - _`) so a repeat of the call returns the original result instead of starting a second, billed screening. The call is never retried automatically. `partnerParams`, `consent`, `antifraud`, `deviceSignals` and `people` in the result keep their wire (snake_case) keys.
+`aml.screenSync` runs the same screening and returns the result in the response, so you need no callback URL. Pass an `idempotencyKey` (16 to 128 characters of `A-Z a-z 0-9 - _`) so a repeat of the call returns the original result instead of starting a second, billed screening. `result.jobId` is the Smile job id. `partnerParams`, `consent`, `antifraud`, `deviceSignals` and `people` in the result keep their wire (snake_case) keys.
+
+The call is never retried automatically. A 408 means the screening provider did not answer in time: nothing was billed and the job is final in `error`, so polling it only returns that error. Resubmit the screening instead, with an `idempotencyKey` so the resubmission is safe to repeat. If it fails with a 500 that has a job id (`err.jobId`), read the outcome with `verifications.retrieve` rather than resubmitting.
 
 ```ts
 const result = await smile.aml.screenSync({
@@ -376,7 +390,7 @@ status.lastKnownStatus; // "online"
 
 ## Error handling
 
-Every failure throws a subclass of `SmileIDError`. Each error carries `statusCode`, `status`, `message`, `code` (services errors only), `requestId`, and `rawBody`.
+Every failure throws a subclass of `SmileIDError`. Each error carries `statusCode`, `status`, `message`, `code` (services errors only), `requestId`, `rawBody`, and `jobId` (the `SmileID-Job-ID` response header, or null when the response had none).
 
 | Error                  | When                                                       |
 | ---------------------- | ---------------------------------------------------------- |

@@ -313,6 +313,97 @@ for (const [status, ErrorClass, body] of [
   });
 }
 
+test('basicKyc.verifySync: the result carries the job id from the SmileID-Job-ID header', async () => {
+  const { fetch } = routerFetch(() =>
+    jsonResponse(200, basicKycResultBody, { 'SmileID-Job-ID': 'job_sync_200' }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const result = await client.basicKyc.verifySync(basicKycBase);
+  assert.equal(result.jobId, 'job_sync_200');
+});
+
+test('basicKyc.verifySync: jobId is null when the response has no SmileID-Job-ID header', async () => {
+  const { fetch } = routerFetch(() => jsonResponse(200, basicKycResultBody));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const result = await client.basicKyc.verifySync(basicKycBase);
+  assert.equal(result.jobId, null);
+});
+
+for (const header of ['SmileID-Job-ID', 'smileid-job-id', 'SMILEID-JOB-ID']) {
+  test(`basicKyc.verifySync: a 408 error carries the job id from a "${header}" header`, async () => {
+    const { fetch } = routerFetch(() =>
+      jsonResponse(
+        408,
+        { status: 'Request Timeout', message: 'The ID authority did not respond in time.' },
+        { [header]: 'job_timed_out' },
+      ),
+    );
+    const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+    await assert.rejects(client.basicKyc.verifySync(basicKycBase), (err: unknown) => {
+      assert.ok(err instanceof InvalidRequestError);
+      assert.equal(err.statusCode, 408);
+      assert.equal(err.jobId, 'job_timed_out');
+      return true;
+    });
+  });
+}
+
+test('basicKyc.verifySync: a 500 without a SmileID-Job-ID header has no job id', async () => {
+  const { fetch } = routerFetch(() => jsonResponse(500, { message: 'Internal server error' }));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  await assert.rejects(client.basicKyc.verifySync(basicKycBase), (err: unknown) => {
+    assert.ok(err instanceof APIError);
+    assert.equal(err.jobId, null);
+    return true;
+  });
+});
+
+// The README's advice for a sync 408: read the job's outcome with
+// verifications.retrieve, using the job id from the error, rather than resubmit.
+test('basicKyc.verifySync: after a 408, retrieve reads the job named by the error', async () => {
+  const { fetch, requests } = routerFetch((req) => {
+    if (req.url.endsWith('/v3/basic_kyc/sync')) {
+      return jsonResponse(
+        408,
+        { status: 'Request Timeout', message: 'The ID authority did not respond in time.' },
+        { 'SmileID-Job-ID': 'job_01h8x9y2z3a4b5c6d7e8f9g0h1' },
+      );
+    }
+    return jsonResponse(200, {
+      status: 'completed',
+      job_id: 'job_01h8x9y2z3a4b5c6d7e8f9g0h1',
+      user_id: 'user_01h8x9y2z3a4b5c6d7e8f9g0h1',
+      message: 'Job completed.',
+    });
+  });
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  let jobId: string | null = null;
+  try {
+    await client.basicKyc.verifySync(basicKycBase);
+    assert.fail('expected verifySync to raise');
+  } catch (err) {
+    assert.ok(err instanceof InvalidRequestError);
+    jobId = err.jobId;
+  }
+  assert.ok(jobId);
+  const status = await client.verifications.retrieve(jobId);
+
+  const ops = requests.filter((r) => !r.url.endsWith('/v3/token'));
+  assert.equal(ops.length, 2);
+  assert.match(ops[0]!.url, /\/v3\/basic_kyc\/sync$/);
+  assert.equal(ops[1]!.method, 'GET');
+  assert.match(ops[1]!.url, /\/v3\/status\/job_01h8x9y2z3a4b5c6d7e8f9g0h1$/);
+  assert.equal(status.status, 'completed');
+  assert.equal(status.jobId, 'job_01h8x9y2z3a4b5c6d7e8f9g0h1');
+  assert.equal(status.userId, 'user_01h8x9y2z3a4b5c6d7e8f9g0h1');
+  assert.equal(status.message, 'Job completed.');
+});
+
 // spec §6.2
 test('document_verification: repeated liveness_images parts, Partner-ID header, binary parts', async () => {
   const { fetch, requests } = routerFetch(() => accepted202('accepted'));
@@ -830,7 +921,7 @@ test('accepted response with missing or mistyped fields falls back to defaults',
 test('accepted response from a transport that returns no JSON maps to defaults', async () => {
   const transport = {
     defaultCallbackUrl: null,
-    execute: async () => ({ statusCode: 202, json: null, rawBody: '', requestId: null }),
+    execute: async () => ({ statusCode: 202, json: null, rawBody: '', requestId: null, jobId: null }),
   } as unknown as Transport;
 
   const accepted = await enhancedKycOp(transport, {
@@ -1027,6 +1118,33 @@ test('aml.screenSync: is not retried after a 408', async () => {
   assert.equal(requests.filter((r) => !r.url.endsWith('/v3/token')).length, 1);
 });
 
+test('aml.screenSync: the result carries the job id from the SmileID-Job-ID header', async () => {
+  const { fetch } = routerFetch(() =>
+    jsonResponse(200, { status: 'clear', product: 'one_time_aml' }, { 'smileid-job-id': 'job_aml_200' }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const result = await client.aml.screenSync(amlBase);
+  assert.equal(result.jobId, 'job_aml_200');
+});
+
+test('aml.screenSync: a 408 error carries the job id from the SmileID-Job-ID header', async () => {
+  const { fetch } = routerFetch(() =>
+    jsonResponse(
+      408,
+      { status: 'Request Timeout', message: 'Provider timed out.' },
+      { 'SmileID-Job-ID': 'job_aml_408' },
+    ),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  await assert.rejects(client.aml.screenSync(amlBase), (err: unknown) => {
+    assert.ok(err instanceof InvalidRequestError);
+    assert.equal(err.jobId, 'job_aml_408');
+    return true;
+  });
+});
+
 test('aml.monitor: same body as screen, fullName optional with searchExistingUser', async () => {
   const { fetch, requests } = routerFetch(() => accepted202('accepted'));
   const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
@@ -1119,4 +1237,5 @@ test('aml.screenSync: a result body missing its free-form objects leaves them un
 
   const result = await client.aml.screenSync(amlBase);
   assert.equal(result.partnerParams, undefined);
+  assert.equal(result.jobId, null);
 });
