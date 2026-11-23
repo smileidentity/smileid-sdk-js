@@ -169,7 +169,7 @@ function toJobStatus(json: unknown): JobStatus {
  * Camelizes the typed envelope of a One-Time AML result. The free-form objects
  * keep their wire keys, so partner-supplied keys and provider fields survive.
  */
-function toOneTimeAmlResult(json: unknown): OneTimeAmlResult {
+function toOneTimeAmlResult(json: unknown, jobId: string | null): OneTimeAmlResult {
   // The transport guarantees a JSON object on success.
   const o = json as Record<string, unknown>;
   const { partner_params, consent, antifraud, device_signals, people, ...typed } = o;
@@ -180,11 +180,12 @@ function toOneTimeAmlResult(json: unknown): OneTimeAmlResult {
     antifraud,
     deviceSignals: device_signals,
     people,
+    jobId,
   } as OneTimeAmlResult;
 }
 
 /** Camelizes the typed envelope of a Basic KYC result; free-form objects keep their wire keys. */
-function toBasicKycResult(json: unknown): BasicKycResult {
+function toBasicKycResult(json: unknown, jobId: string | null): BasicKycResult {
   // The transport guarantees a JSON object on success.
   const o = json as Record<string, unknown>;
   const { partner_params, consent, antifraud, device_signals, ...typed } = o;
@@ -194,6 +195,7 @@ function toBasicKycResult(json: unknown): BasicKycResult {
     consent,
     antifraud,
     deviceSignals: device_signals,
+    jobId,
   } as BasicKycResult;
 }
 
@@ -313,7 +315,7 @@ export async function basicKycSync(
     multipart: buildMultipart(basicKycParts(params, explicitCallback(params.callbackUrl, opts))),
     ...planExtras(opts),
   });
-  return toBasicKycResult(result.json);
+  return toBasicKycResult(result.json, result.jobId);
 }
 
 export async function documentVerification(
@@ -595,7 +597,7 @@ export async function oneTimeAmlSync(
     multipart: buildMultipart(amlParts(params, opts, transport)),
     ...planExtras(opts),
   });
-  return toOneTimeAmlResult(result.json);
+  return toOneTimeAmlResult(result.json, result.jobId);
 }
 
 export async function amlMonitoring(

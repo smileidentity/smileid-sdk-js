@@ -150,6 +150,12 @@ export interface BasicKycResult {
   antifraud?: Record<string, unknown> | null;
   deviceSignals?: Record<string, unknown> | null;
   kycReceipt?: string | null;
+  /**
+   * The Smile job id, from the response's `SmileID-Job-ID` header, or null when
+   * the response had none. Optional so objects typed before this field existed
+   * still compile; the SDK always sets it.
+   */
+  jobId?: string | null;
 }
 
 /** documents.verify (spec §6.2). */
@@ -544,4 +550,10 @@ export interface OneTimeAmlResult {
   consent: Record<string, unknown>;
   antifraud: Record<string, unknown> | null;
   deviceSignals: Record<string, unknown> | null;
+  /**
+   * The Smile job id, from the response's `SmileID-Job-ID` header, or null when
+   * the response had none. Optional so objects typed before this field existed
+   * still compile; the SDK always sets it.
+   */
+  jobId?: string | null;
 }

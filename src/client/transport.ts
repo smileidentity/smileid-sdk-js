@@ -61,6 +61,8 @@ export interface TransportResult {
   json: unknown;
   rawBody: string;
   requestId: string | null;
+  /** The `SmileID-Job-ID` response header, or null when the response had none. */
+  jobId: string | null;
 }
 
 /** Should this attempt be retried, given the operation and outcome (spec §2A). */
@@ -190,6 +192,9 @@ export class Transport {
 
       const rawBody = await resp.text();
       const requestId = resp.headers.get('x-request-id');
+      // Headers.get is case-insensitive, so any casing of the header matches.
+      // A blank value names no job, so it counts as absent.
+      const jobId = resp.headers.get('smileid-job-id')?.trim() || null;
 
       if (resp.status >= 200 && resp.status < 300) {
         const json = safeJson(rawBody);
@@ -201,13 +206,14 @@ export class Transport {
             message: 'Expected a JSON object in the response body.',
             rawBody,
             requestId,
+            jobId,
           });
         }
-        return { statusCode: resp.status, json, rawBody, requestId };
+        return { statusCode: resp.status, json, rawBody, requestId, jobId };
       }
 
       if (plan.allow404 && resp.status === 404) {
-        return { statusCode: resp.status, json: safeJson(rawBody), rawBody, requestId };
+        return { statusCode: resp.status, json: safeJson(rawBody), rawBody, requestId, jobId };
       }
 
       if (shouldRetry(plan.idempotent, attempt, this.config.maxRetries, resp.status)) {
@@ -217,7 +223,7 @@ export class Transport {
         continue;
       }
 
-      throw parseError({ statusCode: resp.status, rawBody, requestId });
+      throw parseError({ statusCode: resp.status, rawBody, requestId, jobId });
     }
   }
 
@@ -263,6 +269,7 @@ export class Transport {
         message: 'The token response did not contain a token.',
         rawBody: result.rawBody,
         requestId: result.requestId,
+        jobId: result.jobId,
       });
     }
     return token;

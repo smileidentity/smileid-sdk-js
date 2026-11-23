@@ -20,6 +20,13 @@ export interface SmileIDErrorFields {
   requestId: string | null;
   /** The unparsed response body, when there was one. */
   rawBody: string | null;
+  /**
+   * The Smile job id from the `SmileID-Job-ID` response header, or null when the
+   * response had none. On a sync verification's 408, 424 or 500 it names the job
+   * whose outcome you can read with `verifications.retrieve`. Optional so objects
+   * typed before this field existed still compile; the SDK always sets it.
+   */
+  jobId?: string | null;
 }
 
 /** Base class for every error raised by the SDK. */
@@ -29,6 +36,8 @@ export class SmileIDError extends Error {
   readonly code: string | null;
   readonly requestId: string | null;
   readonly rawBody: string | null;
+  /** The job id from the `SmileID-Job-ID` response header, or null when there was none. */
+  readonly jobId: string | null;
 
   constructor(fields: Partial<SmileIDErrorFields> & { message: string }) {
     super(fields.message);
@@ -38,6 +47,7 @@ export class SmileIDError extends Error {
     this.code = fields.code ?? null;
     this.requestId = fields.requestId ?? null;
     this.rawBody = fields.rawBody ?? null;
+    this.jobId = fields.jobId ?? null;
     // Restore prototype chain when compiled down to older targets.
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -92,6 +102,8 @@ export interface ErrorSource {
   statusCode: number;
   rawBody: string | null;
   requestId: string | null;
+  /** The `SmileID-Job-ID` response header, when the response had one. */
+  jobId?: string | null;
 }
 
 /**
@@ -130,5 +142,6 @@ export function parseError(source: ErrorSource): SmileIDError {
     code,
     requestId: source.requestId,
     rawBody: source.rawBody,
+    jobId: source.jobId ?? null,
   });
 }
