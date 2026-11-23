@@ -1,0 +1,21 @@
+name: Spec coverage
+
+# Checks spec-coverage.json against the spec at its spec_tag, on every pull
+# request whatever its base branch.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  spec-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: smileidentity/central-workflows/.github/actions/spec-coverage@49a78637405548038aff983d4cdf7c37eba655b4 # spec-coverage-check branch; move to main after central-workflows merges it
