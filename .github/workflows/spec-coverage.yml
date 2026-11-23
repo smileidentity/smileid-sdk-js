@@ -18,4 +18,4 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: smileidentity/central-workflows/.github/actions/spec-coverage@49a78637405548038aff983d4cdf7c37eba655b4 # spec-coverage-check branch; move to main after central-workflows merges it
+      - uses: smileidentity/central-workflows/.github/actions/spec-coverage@cccc8dc1eea22671b2ad4c0ca15f03980a1879e0 # main
