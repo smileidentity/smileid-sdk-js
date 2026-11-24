@@ -29,7 +29,7 @@ const RETRY_AFTER_CAP_SECONDS = 60;
 
 /** A fully-described request for {@link Transport.execute}. */
 export interface RequestPlan {
-  method: 'GET' | 'POST';
+  method: 'GET' | 'POST' | 'PUT';
   /** Path with placeholders already substituted (e.g. /v3/status/job_123). */
   path: string;
   authenticated: boolean;

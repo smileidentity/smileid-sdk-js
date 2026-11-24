@@ -66,6 +66,17 @@ export type {
   SupportedDocumentsResponse,
   IdStatusParams,
   IdStatusResponse,
+  PhoneVerificationParams,
+  AddressVerificationParams,
+  SmileLinkIdType,
+  CreateSmileLinkParams,
+  SmileLinkCreated,
+  SmileLink,
+  SmileLinkJobStats,
+  SmileLinkListItem,
+  ListSmileLinksParams,
+  SmileLinkListResponse,
+  UpdateSmileLinkParams,
 } from './generated/models/index.js';
 
 // Error hierarchy.

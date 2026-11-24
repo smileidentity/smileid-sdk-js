@@ -18,6 +18,7 @@ import {
   type AmlMonitoringNewsParams,
   type AmlMonitoringNewsResponse,
   type AmlMonitoringParams,
+  type AddressVerificationParams,
   type AuthenticationParams,
   type BankCodesParams,
   type BankCodesResponse,
@@ -27,6 +28,7 @@ import {
   type BiometricKycParams,
   type CompareParams,
   type Consent,
+  type CreateSmileLinkParams,
   type DocumentVerificationParams,
   type EnhancedDocumentVerificationParams,
   type ResidencyDocumentVerificationParams,
@@ -35,18 +37,25 @@ import {
   type EnhancedKycSyncParams,
   type IdStatusParams,
   type IdStatusResponse,
+  type ListSmileLinksParams,
   type MetadataItem,
   type OneTimeAmlParams,
   type OneTimeAmlResult,
   type OneTimeAmlSyncParams,
   type PartnerParams,
+  type PhoneVerificationParams,
   type RegistrationParams,
   type ReportFraudParams,
   type RequestOptions,
+  type SmileLink,
+  type SmileLinkIdType,
+  type SmileLinkCreated,
+  type SmileLinkListResponse,
   type SupportedDocumentsParams,
   type SupportedDocumentsResponse,
   type SupportedIdTypesParams,
   type SupportedIdTypesResponse,
+  type UpdateSmileLinkParams,
   type UserDetails,
 } from '../models/index.js';
 
@@ -168,15 +177,35 @@ function toJobStatus(json: unknown): JobStatus {
 }
 
 /**
+ * The `User-ID`, `Response-Signature` and `Response-Timestamp` headers of a sync response.
+ * The `User-ID` header wins; the body's `user_id` is the fallback. A blank header counts as absent.
+ */
+function syncResponseHeaders(
+  headers: Headers,
+  body: Record<string, unknown>,
+): { userId: string | null; responseSignature: string | null; responseTimestamp: string | null } {
+  return {
+    userId: headers.get('user-id')?.trim() || (typeof body.user_id === 'string' ? body.user_id : null),
+    responseSignature: headers.get('response-signature'),
+    responseTimestamp: headers.get('response-timestamp'),
+  };
+}
+
+/**
  * Camelizes the typed envelope of a One-Time AML result. The free-form objects
  * keep their wire keys, so partner-supplied keys and provider fields survive.
  */
-function toOneTimeAmlResult(json: unknown, jobId: string | null): OneTimeAmlResult {
+function toOneTimeAmlResult(
+  json: unknown,
+  jobId: string | null,
+  headers: Headers,
+): OneTimeAmlResult {
   // The transport guarantees a JSON object on success.
   const o = json as Record<string, unknown>;
   const { partner_params, consent, antifraud, device_signals, people, ...typed } = o;
   return {
     ...(camelizeKeys(typed) as object),
+    ...syncResponseHeaders(headers, o),
     partnerParams: partner_params,
     consent,
     antifraud,
@@ -210,12 +239,13 @@ function toEnhancedKycResult(json: unknown, headers: Headers): EnhancedKycResult
 }
 
 /** Camelizes the typed envelope of a Basic KYC result; free-form objects keep their wire keys. */
-function toBasicKycResult(json: unknown, jobId: string | null): BasicKycResult {
+function toBasicKycResult(json: unknown, jobId: string | null, headers: Headers): BasicKycResult {
   // The transport guarantees a JSON object on success.
   const o = json as Record<string, unknown>;
   const { partner_params, consent, antifraud, device_signals, ...typed } = o;
   return {
     ...(camelizeKeys(typed) as object),
+    ...syncResponseHeaders(headers, o),
     partnerParams: partner_params,
     consent,
     antifraud,
@@ -366,7 +396,7 @@ export async function basicKycSync(
     multipart: buildMultipart(basicKycParts(params, explicitCallback(params.callbackUrl, opts))),
     ...planExtras(opts),
   });
-  return toBasicKycResult(result.json, result.jobId);
+  return toBasicKycResult(result.json, result.jobId, result.headers);
 }
 
 export async function documentVerification(
@@ -648,7 +678,7 @@ export async function oneTimeAmlSync(
     multipart: buildMultipart(amlParts(params, opts, transport)),
     ...planExtras(opts),
   });
-  return toOneTimeAmlResult(result.json, result.jobId);
+  return toOneTimeAmlResult(result.json, result.jobId, result.headers);
 }
 
 export async function amlMonitoring(
@@ -829,4 +859,185 @@ export async function idStatus(
     ...planExtras(opts),
   });
   return camelizeKeys(result.json) as IdStatusResponse;
+}
+
+// ---- phone and address verification -----------------------------------------
+
+export async function phoneVerification(
+  transport: Transport,
+  params: PhoneVerificationParams,
+  opts?: RequestOptions,
+): Promise<AcceptedResponse> {
+  // user_id is an optional body field here, not the User-ID header.
+  const parts: MultipartPart[] = [
+    ...scalar('country', params.country),
+    ...scalar('phone_number', params.phoneNumber),
+    ...scalar('operator', params.operator),
+    ...scalar('id_number', params.idNumber),
+    ...scalar('user_id', params.userId),
+    ...scalar('callback_url', effectiveCallback(params.callbackUrl, opts, transport)),
+    ...jsonPart('user_details', userDetailsJson(params.userDetails)),
+    ...jsonPart('consent', consentJson(params.consent)),
+    ...optionalJson('partner_params', params.partnerParams),
+    ...optionalJson('metadata', params.metadata),
+  ];
+  const result = await transport.execute({
+    method: 'POST',
+    path: '/v3/phone',
+    authenticated: true,
+    needsPartnerIdHeader: false,
+    idempotent: false,
+    multipart: buildMultipart(parts),
+    ...planExtras(opts),
+  });
+  return toAccepted(result.json);
+}
+
+export async function addressVerification(
+  transport: Transport,
+  params: AddressVerificationParams,
+  opts?: RequestOptions,
+): Promise<AcceptedResponse> {
+  // user_id is an optional body field here, not the User-ID header.
+  const parts: MultipartPart[] = [
+    ...scalar('address', params.address),
+    ...scalar('country', params.country),
+    ...scalar('id_number', params.idNumber),
+    ...scalar('utility_number', params.utilityNumber),
+    ...scalar('utility_provider', params.utilityProvider),
+    ...scalar('utility_type', params.utilityType),
+    ...scalar('user_id', params.userId),
+    ...scalar('callback_url', effectiveCallback(params.callbackUrl, opts, transport)),
+    ...jsonPart('user_details', userDetailsJson(params.userDetails)),
+    ...jsonPart('consent', consentJson(params.consent)),
+    ...optionalJson('partner_params', params.partnerParams),
+    ...optionalJson('metadata', params.metadata),
+  ];
+  const result = await transport.execute({
+    method: 'POST',
+    path: '/v3/address',
+    authenticated: true,
+    needsPartnerIdHeader: false,
+    idempotent: false,
+    multipart: buildMultipart(parts),
+    ...planExtras(opts),
+  });
+  return toAccepted(result.json);
+}
+
+// ---- Smile Links ---------------------------------------------------------------
+
+function idTypesJson(idTypes: SmileLinkIdType[]): string {
+  return JSON.stringify(
+    idTypes.map((t) => ({
+      country: t.country,
+      id_type: t.idType,
+      verification_method: t.verificationMethod,
+    })),
+  );
+}
+
+/** Camelizes a link resource; `partner_params` keeps the caller's own keys. */
+function toSmileLink<T extends SmileLink>(json: unknown): T {
+  // The transport guarantees a JSON object on success.
+  const { partner_params, ...typed } = json as Record<string, unknown>;
+  return {
+    ...(camelizeKeys(typed) as object),
+    ...(partner_params === undefined ? {} : { partnerParams: partner_params }),
+  } as T;
+}
+
+export async function createSmileLink(
+  transport: Transport,
+  params: CreateSmileLinkParams,
+  opts?: RequestOptions,
+): Promise<SmileLinkCreated> {
+  const parts: MultipartPart[] = [
+    ...jsonPart('id_types', idTypesJson(params.idTypes)),
+    ...scalar('name', params.name),
+    ...scalar('company_name', params.companyName),
+    ...scalar('notice_privacy_policy_url', params.noticePrivacyPolicyUrl),
+    ...scalar('is_single_use', params.isSingleUse),
+    ...scalar('callback_url', effectiveCallback(params.callbackUrl, opts, transport)),
+    ...scalar('description', params.description),
+    ...scalar('expires_at', params.expiresAt),
+    ...scalar('logo_url', params.logoUrl),
+    ...scalar('redirect_url', params.redirectUrl),
+    ...scalar('theme_color', params.themeColor),
+    ...optionalJson('partner_params', params.partnerParams),
+    ...scalar('user_id', params.userId),
+  ];
+  const result = await transport.execute({
+    method: 'POST',
+    path: '/v3/smile_links',
+    authenticated: true,
+    needsPartnerIdHeader: false,
+    idempotent: false, // never auto-retried: a repeat would create a second link
+    multipart: buildMultipart(parts),
+    ...planExtras(opts),
+  });
+  return camelizeKeys(result.json) as SmileLinkCreated;
+}
+
+export async function listSmileLinks(
+  transport: Transport,
+  params?: ListSmileLinksParams,
+  opts?: RequestOptions,
+): Promise<SmileLinkListResponse> {
+  const result = await transport.execute({
+    method: 'GET',
+    path: '/v3/smile_links',
+    authenticated: true,
+    needsPartnerIdHeader: false,
+    idempotent: true,
+    query: {
+      limit: params?.limit === undefined ? undefined : String(params.limit),
+      page: params?.page === undefined ? undefined : String(params.page),
+      single_use: params?.singleUse === undefined ? undefined : String(params.singleUse),
+    },
+    ...planExtras(opts),
+  });
+  const o = result.json as { links?: unknown[]; meta?: unknown };
+  return {
+    ...(camelizeKeys({ meta: o.meta }) as object),
+    links: (o.links ?? []).map((link) => toSmileLink(link)),
+  } as SmileLinkListResponse;
+}
+
+export async function getSmileLink(
+  transport: Transport,
+  refId: string,
+  opts?: RequestOptions,
+): Promise<SmileLink> {
+  const result = await transport.execute({
+    method: 'GET',
+    path: `/v3/smile_links/${encodeURIComponent(refId)}`,
+    authenticated: true,
+    needsPartnerIdHeader: false,
+    idempotent: true,
+    ...planExtras(opts),
+  });
+  return toSmileLink(result.json);
+}
+
+export async function updateSmileLink(
+  transport: Transport,
+  refId: string,
+  params: UpdateSmileLinkParams,
+  opts?: RequestOptions,
+): Promise<SmileLink> {
+  const parts: MultipartPart[] = [
+    ...(params.idTypes ? jsonPart('id_types', idTypesJson(params.idTypes)) : []),
+    ...scalar('is_disabled', params.isDisabled),
+  ];
+  const result = await transport.execute({
+    method: 'PUT',
+    path: `/v3/smile_links/${encodeURIComponent(refId)}`,
+    authenticated: true,
+    needsPartnerIdHeader: false,
+    idempotent: false,
+    multipart: buildMultipart(parts),
+    ...planExtras(opts),
+  });
+  return toSmileLink(result.json);
 }

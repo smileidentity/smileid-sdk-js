@@ -184,6 +184,58 @@ test('aml.monitoringNews: the token binds the aml product and no user', async ()
   assert.deepEqual(fields(req), { product: 'aml' });
 });
 
+const linkIdTypes = [{ country: 'NG', idType: 'NIN', verificationMethod: 'enhanced_kyc' }];
+const phoneAddressOperations: Record<string, [string, (c: SmileID) => Promise<unknown>]> = {
+  'phone.verify': [
+    'phone_number_verification',
+    (c) =>
+      c.phone.verify({
+        country: 'NG',
+        phoneNumber: '+2348012345678',
+        userDetails,
+        consent,
+        userId: 'user-1',
+      }),
+  ],
+  'address.verify': [
+    'address_verification',
+    (c) =>
+      c.address.verify({
+        address: '12 Test Road',
+        country: 'ZA',
+        idNumber: '9001015800085',
+        userDetails,
+        consent,
+        userId: 'user-1',
+      }),
+  ],
+};
+
+for (const [name, [product, call]] of Object.entries(phoneAddressOperations)) {
+  test(`${name}: the token binds the body user and the ${product} product`, async () => {
+    const { fetch, requests } = routerFetch(accepted);
+    await call(new SmileID({ partnerId: '1234', apiKey: 'k', fetch }));
+    const req = requests.find(isToken);
+    assert.ok(req);
+    assert.deepEqual(fields(req), { user_id: 'user-1', product });
+  });
+}
+
+Object.assign(nonJobOperations, {
+  'smileLinks.create': (c: SmileID) =>
+    c.smileLinks.create({
+      idTypes: linkIdTypes,
+      name: 'Onboarding',
+      noticePrivacyPolicyUrl: 'https://partner.example/privacy',
+      isSingleUse: true,
+      userId: 'user-1',
+    }),
+  'smileLinks.list': (c: SmileID) => c.smileLinks.list(),
+  'smileLinks.retrieve': (c: SmileID) => c.smileLinks.retrieve('65983864-e8c6-4d09-890a-2e5f88fc50f6'),
+  'smileLinks.update': (c: SmileID) =>
+    c.smileLinks.update('65983864-e8c6-4d09-890a-2e5f88fc50f6', { isDisabled: true }),
+});
+
 for (const [name, call] of Object.entries(nonJobOperations)) {
   test(`${name}: the token binds nothing`, async () => {
     const { fetch, requests, tokenCalls } = routerFetch(anyResponse);
