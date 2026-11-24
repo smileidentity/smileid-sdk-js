@@ -115,6 +115,36 @@ accepted.jobId;      // "job_..."
 accepted.isAccepted; // true
 ```
 
+`enhancedKyc.verifySync` takes the same fields and returns the result in the response, so it needs no callback URL. The result is the payload the async callback would have delivered. `result.jobId` is the Smile job id. `result.userId` comes from the `User-ID` header, or the body. `status`, `message`, `reason` and `kycReceipt` are typed, and `result.body` holds the whole response body with its wire (snake_case) keys. `result.responseSignature` and `result.responseTimestamp` carry the `Response-Signature` and `Response-Timestamp` headers, which are computed the same way as for a webhook, so you can check them with your own webhook verification code. The SDK does not check them.
+
+The call is never retried automatically. If it fails with a 408 or 424, the job is recorded and may still have run. Submitting it again runs and bills a second lookup, so don't resubmit automatically. Read the outcome with `verifications.retrieve`, using the job id on the error (`err.jobId`). Do the same for a 500 that has a job id. A 500 with no job id means the job was not created.
+
+```ts
+try {
+  const result = await smile.enhancedKyc.verifySync({
+    country: 'NG',
+    idType: 'NIN',
+    idNumber: '12345678901',
+    userDetails,
+    consent,
+    userId: 'user_01h8x9y2z3a4b5c6d7e8f9g0h1',
+  });
+  console.log(result.jobId, result.status, result.reason);
+} catch (err) {
+  if (
+    err instanceof SmileIDError &&
+    (err.statusCode === 408 || err.statusCode === 424 || err.statusCode === 500) &&
+    err.jobId
+  ) {
+    // The job was created: read its outcome, don't resubmit.
+    const status = await smile.verifications.retrieve(err.jobId);
+    console.log(status.status);
+  } else {
+    throw err;
+  }
+}
+```
+
 ### Basic KYC
 
 `basicKyc.verify` takes the same fields as `enhancedKyc.verify`. It checks the details you submit against the ID authority's record and reports a match verdict for each field. The result goes to your callback URL.
