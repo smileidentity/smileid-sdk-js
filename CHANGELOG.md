@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [13.2.0] - 2026-11-24
+
 ### Added
 
 - `basicKyc.verify` and `basicKyc.verifySync` run a Basic KYC verification, which reports a match verdict for each field you submit. The sync form returns the result directly. Requests mint a token bound to the `basic_kyc` product.
@@ -73,7 +75,8 @@ First public release.
   401.
 - Retry policy for idempotent operations, honouring `Retry-After`.
 
-[unreleased]: https://github.com/smileidentity/smileid-sdk-js/compare/v13.1.0...HEAD
+[unreleased]: https://github.com/smileidentity/smileid-sdk-js/compare/v13.2.0...HEAD
+[13.2.0]: https://github.com/smileidentity/smileid-sdk-js/compare/v13.1.0...v13.2.0
 [13.1.0]: https://github.com/smileidentity/smileid-sdk-js/compare/v13.0.0...v13.1.0
 [13.0.0]: https://github.com/smileidentity/smileid-sdk-js/compare/v12.1.0...v13.0.0
 [12.1.0]: https://github.com/smileidentity/smileid-sdk-js/compare/v12.0.0...v12.1.0
