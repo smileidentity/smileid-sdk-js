@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `phone.verify` runs a phone number verification, and `address.verify` an address verification. Both send the result to your callback URL. Their tokens bind the `phone_number_verification` and `address_verification` products.
+- `smileLinks.create`, `smileLinks.list`, `smileLinks.retrieve` and `smileLinks.update` manage Smile Links, the hosted verification links you hand to end users. `smileLinks.create` is never retried automatically.
+- `BasicKycResult` and `OneTimeAmlResult` have `userId`, `responseSignature` and `responseTimestamp`, from the `User-ID`, `Response-Signature` and `Response-Timestamp` headers of `basicKyc.verifySync` and `aml.screenSync`. `userId` falls back to the body's `user_id` when the header is absent. The SDK does not check the signature.
+
 ## [13.2.0] - 2026-11-24
 
 ### Added

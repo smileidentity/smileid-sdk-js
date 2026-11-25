@@ -19,6 +19,8 @@ const PRODUCT_BY_PATH_TEMPLATE: Record<string, string> = {
   '/v3/aml/sync': 'one_time_aml',
   '/v3/aml/monitoring': 'aml',
   '/v3/aml/monitoring/{job_id}/news/{reference}': 'aml',
+  '/v3/phone': 'phone_number_verification',
+  '/v3/address': 'address_verification',
 };
 
 const MATCHERS: [RegExp, string][] = Object.entries(PRODUCT_BY_PATH_TEMPLATE).map(

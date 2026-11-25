@@ -149,7 +149,7 @@ try {
 
 `basicKyc.verify` takes the same fields as `enhancedKyc.verify`. It checks the details you submit against the ID authority's record and reports a match verdict for each field. The result goes to your callback URL.
 
-`basicKyc.verifySync` returns the result in the response, so it needs no callback URL. `result.jobId` is the Smile job id. `partnerParams`, `consent`, `antifraud` and `deviceSignals` in the result keep their wire (snake_case) keys.
+`basicKyc.verifySync` returns the result in the response, so it needs no callback URL. `result.jobId` is the Smile job id. `result.userId` comes from the `User-ID` header, or the body. `result.responseSignature` and `result.responseTimestamp` carry the `Response-Signature` and `Response-Timestamp` headers, which are computed the same way as for a webhook, so you can check them with your own webhook verification code. The SDK does not check them. `partnerParams`, `consent`, `antifraud` and `deviceSignals` in the result keep their wire (snake_case) keys.
 
 The call is never retried automatically. If it fails with a 408 or 424, the job is recorded and may still have run. Submitting it again runs and bills a second lookup, so don't resubmit automatically. Read the outcome with `verifications.retrieve`, using the job id on the error (`err.jobId`). Do the same for a 500 that has a job id. A 500 with no job id means the job was not created.
 
@@ -303,7 +303,7 @@ const accepted = await smile.aml.screen({
 });
 ```
 
-`aml.screenSync` runs the same screening and returns the result in the response, so you need no callback URL. Pass an `idempotencyKey` (16 to 128 characters of `A-Z a-z 0-9 - _`) so a repeat of the call returns the original result instead of starting a second, billed screening. `result.jobId` is the Smile job id. `partnerParams`, `consent`, `antifraud`, `deviceSignals` and `people` in the result keep their wire (snake_case) keys.
+`aml.screenSync` runs the same screening and returns the result in the response, so you need no callback URL. Pass an `idempotencyKey` (16 to 128 characters of `A-Z a-z 0-9 - _`) so a repeat of the call returns the original result instead of starting a second, billed screening. `result.jobId` is the Smile job id. `result.userId` comes from the `User-ID` header, or the body. `result.responseSignature` and `result.responseTimestamp` carry the `Response-Signature` and `Response-Timestamp` headers, which are computed the same way as for a webhook, so you can check them with your own webhook verification code. The SDK does not check them. `partnerParams`, `consent`, `antifraud`, `deviceSignals` and `people` in the result keep their wire (snake_case) keys.
 
 The call is never retried automatically. A 408 means the screening provider did not answer in time: nothing was billed and the job is final in `error`, so polling it only returns that error. Resubmit the screening instead, with an `idempotencyKey` so the resubmission is safe to repeat. If it fails with a 500 that has a job id (`err.jobId`), read the outcome with `verifications.retrieve` rather than resubmitting.
 
@@ -328,6 +328,56 @@ const news = await smile.aml.monitoringNews(accepted.jobId!, 'ref_001', {
   page: 1,
   limit: 25,
 });
+```
+
+### Phone number verification
+
+`phone.verify` checks who a mobile number is registered to and how well that registration matches the names, and the ID number, you supply. The result arrives on your callback URL. `phoneNumber` is the number to check, in E.164 format. It is not `userDetails.phoneNumber`, which is the consumer's own contact number. Kenya requires `idNumber`, and Ghana requires `operator` (`MTN`, `VODAFONE` or `AIRTELTIGO`). `userId` is optional and is sent as a body field.
+
+```ts
+const accepted = await smile.phone.verify({
+  country: 'NG',
+  phoneNumber: '+2348012345678',
+  userDetails,
+  consent,
+});
+```
+
+### Address verification
+
+`address.verify` checks an address against the address on record with the country's data provider. The result arrives on your callback URL. `country` is `NG` or `ZA`. Nigeria needs `utilityNumber`, `utilityProvider` and `utilityType` (`PrePaid` or `PostPaid`). South Africa needs `idNumber`. `userId` is optional and is sent as a body field.
+
+```ts
+const accepted = await smile.address.verify({
+  address: '12 Test Road, Testville',
+  country: 'NG',
+  utilityNumber: '0123456789',
+  utilityProvider: 'IKEDC',
+  utilityType: 'PrePaid',
+  userDetails,
+  consent,
+});
+```
+
+### Smile Links
+
+`smileLinks.create` makes a hosted verification link to hand to an end user. It returns the `link` URL and its `refId`. `idTypes`, `name`, `noticePrivacyPolicyUrl` and `isSingleUse` are required. `callbackUrl` defaults to the client's `defaultCallbackUrl`, and then to your configured callback. It is never retried automatically, because a repeat would make a second link.
+
+`smileLinks.retrieve` reads one link by `refId`. `smileLinks.list` returns a page of your links with their job outcome counts, newest first, and takes `limit`, `page` and `singleUse`. `smileLinks.update` changes a link's `idTypes` or disables it with `isDisabled`. Send at least one of them. A link's `partnerParams` keep the keys you sent.
+
+```ts
+const created = await smile.smileLinks.create({
+  idTypes: [{ country: 'NG', idType: 'NIN', verificationMethod: 'enhanced_kyc' }],
+  name: 'Onboarding',
+  noticePrivacyPolicyUrl: 'https://partner.example/privacy',
+  isSingleUse: false,
+});
+console.log(created.link);
+
+const link = await smile.smileLinks.retrieve(created.refId);
+await smile.smileLinks.update(link.refId, { isDisabled: true });
+const page = await smile.smileLinks.list({ limit: 20, page: 1 });
+console.log(page.meta.totalCount);
 ```
 
 ### Check a verification

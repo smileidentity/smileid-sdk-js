@@ -1,7 +1,7 @@
 /**
  * The SmileID client and its resource namespaces (spec §4).
  *
- * Canonical shape: `client.<resource>.<verb>(args, options)`. All 14 public
+ * Canonical shape: `client.<resource>.<verb>(args, options)`. All public
  * operations plus the waitUntilComplete poll helper and the flagFraud /
  * clearFraud convenience wrappers.
  */
@@ -21,6 +21,7 @@ import {
 } from '../helpers/validation.js';
 import type {
   AcceptedResponse,
+  AddressVerificationParams,
   AmlMonitoringNewsParams,
   AmlMonitoringNewsResponse,
   AmlMonitoringParams,
@@ -32,6 +33,7 @@ import type {
   BasicKycSyncParams,
   ClearFraudParams,
   CompareParams,
+  CreateSmileLinkParams,
   DocumentVerificationParams,
   EnhancedDocumentVerificationParams,
   ResidencyDocumentVerificationParams,
@@ -42,17 +44,23 @@ import type {
   IdStatusParams,
   IdStatusResponse,
   JobStatus,
+  ListSmileLinksParams,
   OneTimeAmlParams,
   OneTimeAmlResult,
   OneTimeAmlSyncParams,
+  PhoneVerificationParams,
   RegistrationParams,
   ReplayParams,
   ReportFraudParams,
   RequestOptions,
+  SmileLink,
+  SmileLinkCreated,
+  SmileLinkListResponse,
   SupportedDocumentsParams,
   SupportedDocumentsResponse,
   SupportedIdTypesParams,
   SupportedIdTypesResponse,
+  UpdateSmileLinkParams,
   WaitOptions,
 } from '../generated/models/index.js';
 
@@ -161,6 +169,28 @@ export class SmileID {
       options?: RequestOptions,
     ): Promise<SupportedDocumentsResponse>;
     idStatus(params: IdStatusParams, options?: RequestOptions): Promise<IdStatusResponse>;
+  };
+
+  /** Phone number verification: who a mobile number is registered to. */
+  readonly phone: {
+    verify(params: PhoneVerificationParams, options?: RequestOptions): Promise<AcceptedResponse>;
+  };
+
+  /** Address verification against a country's address provider. */
+  readonly address: {
+    verify(params: AddressVerificationParams, options?: RequestOptions): Promise<AcceptedResponse>;
+  };
+
+  /** Smile Links: hosted verification links to hand to end users. */
+  readonly smileLinks: {
+    create(params: CreateSmileLinkParams, options?: RequestOptions): Promise<SmileLinkCreated>;
+    list(params?: ListSmileLinksParams, options?: RequestOptions): Promise<SmileLinkListResponse>;
+    retrieve(refId: string, options?: RequestOptions): Promise<SmileLink>;
+    update(
+      refId: string,
+      params: UpdateSmileLinkParams,
+      options?: RequestOptions,
+    ): Promise<SmileLink>;
   };
 
   constructor(config: SmileIDConfig) {
@@ -311,6 +341,34 @@ export class SmileID {
         };
         validateReportFraud(report);
         return ops.reportFraud(t, userId, report, options);
+      },
+    };
+
+    this.phone = {
+      verify: (params, options) => {
+        validateUserDetails(params.userDetails);
+        return ops.phoneVerification(t, params, options);
+      },
+    };
+
+    this.address = {
+      verify: (params, options) => {
+        validateUserDetails(params.userDetails);
+        return ops.addressVerification(t, params, options);
+      },
+    };
+
+    this.smileLinks = {
+      create: (params, options) => ops.createSmileLink(t, params, options),
+      list: (params, options) => ops.listSmileLinks(t, params, options),
+      retrieve: (refId, options) => ops.getSmileLink(t, refId, options),
+      update: (refId, params, options) => {
+        if (params.idTypes === undefined && params.isDisabled === undefined) {
+          throw new ValidationError({
+            message: 'update requires at least one of idTypes or isDisabled.',
+          });
+        }
+        return ops.updateSmileLink(t, refId, params, options);
       },
     };
 

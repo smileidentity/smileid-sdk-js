@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { SmileID } from '../../client/client.js';
-import { APIError, InvalidRequestError } from '../../errors/index.js';
+import { APIError, InvalidRequestError, NotFoundError, ValidationError } from '../../errors/index.js';
 import { Consent } from '../../helpers/consent.js';
 import { VERSION } from '../../version.js';
 import {
@@ -1534,4 +1534,544 @@ test('aml.screenSync: a result body missing its free-form objects leaves them un
   const result = await client.aml.screenSync(amlBase);
   assert.equal(result.partnerParams, undefined);
   assert.equal(result.jobId, null);
+});
+
+const amlSyncBase = { ...amlBase, idempotencyKey: 'k'.repeat(16) };
+
+// ---- sync response headers: User-ID, Response-Signature, Response-Timestamp -------------
+
+test('basicKyc.verifySync: the result carries the User-ID, Response-Signature and Response-Timestamp headers', async () => {
+  const { fetch } = routerFetch(() =>
+    jsonResponse(200, basicKycResultBody, {
+      'User-ID': 'user_from_header',
+      'Response-Signature': 'c2lnbmF0dXJl',
+      'Response-Timestamp': '2026-11-20T12:00:00.000Z',
+    }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  const result = await client.basicKyc.verifySync(basicKycBase);
+  assert.equal(result.userId, 'user_from_header');
+  assert.equal(result.responseSignature, 'c2lnbmF0dXJl');
+  assert.equal(result.responseTimestamp, '2026-11-20T12:00:00.000Z');
+});
+
+test('basicKyc.verifySync: with no such headers, userId is the body user_id and the rest are null', async () => {
+  for (const [headers, body, userId] of [
+    [{}, { ...basicKycResultBody, user_id: 'user_from_body' }, 'user_from_body'],
+    [{ 'User-ID': '  ' }, { ...basicKycResultBody, user_id: 'user_from_body' }, 'user_from_body'],
+    [{}, basicKycResultBody, null],
+    [{}, { ...basicKycResultBody, user_id: 7 }, null],
+  ] as [Record<string, string>, Record<string, unknown>, string | null][]) {
+    const { fetch } = routerFetch(() => jsonResponse(200, body, headers));
+    const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+    const result = await client.basicKyc.verifySync(basicKycBase);
+    assert.equal(result.userId, userId);
+    assert.equal(result.responseSignature, null);
+    assert.equal(result.responseTimestamp, null);
+  }
+});
+
+test('aml.screenSync: the result carries the User-ID, Response-Signature and Response-Timestamp headers', async () => {
+  const { fetch } = routerFetch(() =>
+    jsonResponse(
+      200,
+      { status: 'clear', product: 'one_time_aml', user_id: 'user_from_body' },
+      {
+        'User-ID': 'user_from_header',
+        'Response-Signature': 'c2lnbmF0dXJl',
+        'Response-Timestamp': '2026-11-20T12:00:00.000Z',
+      },
+    ),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  const result = await client.aml.screenSync(amlSyncBase);
+  assert.equal(result.userId, 'user_from_header');
+  assert.equal(result.responseSignature, 'c2lnbmF0dXJl');
+  assert.equal(result.responseTimestamp, '2026-11-20T12:00:00.000Z');
+});
+
+test('aml.screenSync: with no such headers, userId is the body user_id and the rest are null', async () => {
+  const { fetch } = routerFetch(() =>
+    jsonResponse(200, { status: 'clear', product: 'one_time_aml', user_id: 'user_from_body' }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  const result = await client.aml.screenSync(amlSyncBase);
+  assert.equal(result.userId, 'user_from_body');
+  assert.equal(result.responseSignature, null);
+  assert.equal(result.responseTimestamp, null);
+});
+
+// ---- phone and address verification -------------------------------------------------------
+
+/** The request's multipart parts, as an exact-match helper. */
+function multipartHelpers(req: RecordedRequest): {
+  text: (name: string, value: string) => string;
+  json: (name: string, value: string) => string;
+  end: string;
+} {
+  const boundary = /^multipart\/form-data; boundary=(.+)$/.exec(req.headers['Content-Type'])?.[1];
+  assert.ok(boundary, 'multipart boundary');
+  return {
+    text: (name, value) =>
+      `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+    json: (name, value) =>
+      `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\nContent-Type: application/json\r\n\r\n${value}\r\n`,
+    end: `--${boundary}--\r\n`,
+  };
+}
+
+const userDetailsWire = '{"given_names":"John","last_name":"Doe","email":"john@example.com"}';
+const phoneAccepted = (): Response =>
+  jsonResponse(202, {
+    status: 'accepted',
+    message: 'Job submitted successfully',
+    job_id: 'job_01h8x9y2z3a4b5c6d7e8f9g0h1',
+    user_id: 'user_01h8x9y2z3a4b5c6d7e8f9g0h1',
+    created_at: '2026-03-10T12:00:00.000Z',
+  });
+
+test('phone.verify: golden request and parsed response', async () => {
+  const { fetch, requests } = routerFetch(phoneAccepted);
+  const client = new SmileID({
+    partnerId: '1234',
+    apiKey: 'k',
+    fetch,
+    defaultCallbackUrl: 'https://example.com/default',
+  });
+
+  const response = await client.phone.verify({
+    country: 'GH',
+    phoneNumber: '+233201234567',
+    operator: 'MTN',
+    idNumber: 'GHA-1',
+    userId: 'user_1',
+    userDetails,
+    consent,
+    partnerParams: { order_id: 'ORD-1' },
+    metadata: [{ name: 'k', value: 'v' }],
+  });
+
+  assert.equal(response.isAccepted, true);
+  assert.equal(response.jobId, 'job_01h8x9y2z3a4b5c6d7e8f9g0h1');
+  assert.equal(response.userId, 'user_01h8x9y2z3a4b5c6d7e8f9g0h1');
+  assert.equal(response.createdAt, '2026-03-10T12:00:00.000Z');
+
+  const req = opRequest(requests);
+  assert.equal(req.method, 'POST');
+  assert.match(req.url, /\/v3\/phone$/);
+  assert.equal(req.headers['User-ID'], undefined, 'user_id goes in the body');
+  assert.equal(req.headers['SmileID-Partner-ID'], undefined);
+  assert.ok(req.headers['SmileID-Token'], 'token attached');
+  assert.equal(req.headers['SmileID-Source-SDK'], 'node');
+  const m = multipartHelpers(req);
+  assert.equal(
+    req.bodyText,
+    m.text('country', 'GH') +
+      m.text('phone_number', '+233201234567') +
+      m.text('operator', 'MTN') +
+      m.text('id_number', 'GHA-1') +
+      m.text('user_id', 'user_1') +
+      m.text('callback_url', 'https://example.com/default') +
+      m.json('user_details', userDetailsWire) +
+      m.json('consent', consentWire) +
+      m.json('partner_params', '{"order_id":"ORD-1"}') +
+      m.json('metadata', '[{"name":"k","value":"v"}]') +
+      m.end,
+  );
+});
+
+test('phone.verify: optional fields are left out, a callback URL option is sent', async () => {
+  const { fetch, requests } = routerFetch(phoneAccepted);
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  await client.phone.verify(
+    { country: 'NG', phoneNumber: '+2348012345678', userDetails, consent },
+    { callbackUrl: 'https://example.com/option' },
+  );
+  const req = opRequest(requests);
+  const m = multipartHelpers(req);
+  assert.equal(
+    req.bodyText,
+    m.text('country', 'NG') +
+      m.text('phone_number', '+2348012345678') +
+      m.text('callback_url', 'https://example.com/option') +
+      m.json('user_details', userDetailsWire) +
+      m.json('consent', consentWire) +
+      m.end,
+  );
+});
+
+test('phone.verify: needs an email or a phone number in userDetails, and an https callback', async () => {
+  const { fetch, requests } = routerFetch(phoneAccepted);
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  const base = { country: 'NG', phoneNumber: '+2348012345678', userDetails, consent };
+  assert.throws(() =>
+    client.phone.verify({ ...base, userDetails: { givenNames: 'John', lastName: 'Doe' } }),
+  );
+  await assert.rejects(client.phone.verify({ ...base, callbackUrl: 'http://example.com/cb' }));
+  assert.equal(requests.length, 0);
+});
+
+test('address.verify: golden request and parsed response', async () => {
+  const { fetch, requests } = routerFetch(() =>
+    jsonResponse(202, {
+      status: 'accepted',
+      message: 'Job submitted successfully',
+      job_id: 'job_addr_1',
+      user_id: 'user_addr_1',
+    }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const response = await client.address.verify({
+    address: '12 Test Road, Testville',
+    country: 'NG',
+    utilityNumber: '0123456789',
+    utilityProvider: 'IKEDC',
+    utilityType: 'PrePaid',
+    userId: 'user_addr_001',
+    callbackUrl: 'https://example.com/callback',
+    userDetails,
+    consent,
+  });
+
+  assert.equal(response.isAccepted, true);
+  assert.equal(response.jobId, 'job_addr_1');
+  assert.equal(response.userId, 'user_addr_1');
+  assert.equal(response.createdAt, null, 'the address response has no created_at');
+
+  const req = opRequest(requests);
+  assert.equal(req.method, 'POST');
+  assert.match(req.url, /\/v3\/address$/);
+  assert.equal(req.headers['User-ID'], undefined, 'user_id goes in the body');
+  assert.ok(req.headers['SmileID-Token'], 'token attached');
+  const m = multipartHelpers(req);
+  assert.equal(
+    req.bodyText,
+    m.text('address', '12 Test Road, Testville') +
+      m.text('country', 'NG') +
+      m.text('utility_number', '0123456789') +
+      m.text('utility_provider', 'IKEDC') +
+      m.text('utility_type', 'PrePaid') +
+      m.text('user_id', 'user_addr_001') +
+      m.text('callback_url', 'https://example.com/callback') +
+      m.json('user_details', userDetailsWire) +
+      m.json('consent', consentWire) +
+      m.end,
+  );
+});
+
+test('address.verify: a South African request sends id_number, with partner params and metadata', async () => {
+  const { fetch, requests } = routerFetch(phoneAccepted);
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  await client.address.verify({
+    address: '1 Long Street',
+    country: 'ZA',
+    idNumber: '9001015800085',
+    userDetails,
+    consent,
+    partnerParams: { order_id: 'ORD-1' },
+    metadata: [{ name: 'k', value: 'v' }],
+  });
+  const req = opRequest(requests);
+  const m = multipartHelpers(req);
+  assert.equal(
+    req.bodyText,
+    m.text('address', '1 Long Street') +
+      m.text('country', 'ZA') +
+      m.text('id_number', '9001015800085') +
+      m.json('user_details', userDetailsWire) +
+      m.json('consent', consentWire) +
+      m.json('partner_params', '{"order_id":"ORD-1"}') +
+      m.json('metadata', '[{"name":"k","value":"v"}]') +
+      m.end,
+  );
+});
+
+test('address.verify: needs an email or a phone number in userDetails', async () => {
+  const { fetch, requests } = routerFetch(phoneAccepted);
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  assert.throws(() =>
+    client.address.verify({
+      address: '1 Long Street',
+      country: 'ZA',
+      idNumber: '9001015800085',
+      userDetails: { givenNames: 'John', lastName: 'Doe' },
+      consent,
+    }),
+  );
+  assert.equal(requests.length, 0);
+});
+
+// ---- Smile Links --------------------------------------------------------------------------
+
+const LINK_ID = '65983864-e8c6-4d09-890a-2e5f88fc50f6';
+const linkIdTypes = [{ country: 'NG', idType: 'NIN', verificationMethod: 'enhanced_kyc' }];
+const linkIdTypesWire = '[{"country":"NG","id_type":"NIN","verification_method":"enhanced_kyc"}]';
+
+const linkResourceBody = {
+  ref_id: LINK_ID,
+  link: `https://links.usesmileid.com/v3/2/${LINK_ID}`,
+  name: 'Onboarding',
+  company_name: 'Acme Pay',
+  description: null,
+  id_types: [{ country: 'NG', id_type: 'NIN', verification_method: 'enhanced_kyc' }],
+  is_single_use: true,
+  callback_url: 'https://example.com/callback',
+  notice_privacy_policy_url: 'https://partner.example/privacy',
+  logo_url: 'https://partner.example/logo.png',
+  redirect_url: null,
+  theme_color: '#000',
+  expires_at: '2027-02-22T00:00:00.000Z',
+  disabled_at: null,
+  partner_params: { order_id: 'ORD-1' },
+  user_id: 'user-123',
+  token_provided_fields: ['consent', 'country'],
+  token_provided_values: {
+    country: 'NG',
+    consent: { granted: true, granted_at: '2026-01-01T09:00:00.000Z' },
+  },
+  created_at: '2026-11-24T10:00:00.000Z',
+  updated_at: '2026-11-24T10:00:00.000Z',
+};
+const linkResource = {
+  refId: LINK_ID,
+  link: `https://links.usesmileid.com/v3/2/${LINK_ID}`,
+  name: 'Onboarding',
+  companyName: 'Acme Pay',
+  description: null,
+  idTypes: [{ country: 'NG', idType: 'NIN', verificationMethod: 'enhanced_kyc' }],
+  isSingleUse: true,
+  callbackUrl: 'https://example.com/callback',
+  noticePrivacyPolicyUrl: 'https://partner.example/privacy',
+  logoUrl: 'https://partner.example/logo.png',
+  redirectUrl: null,
+  themeColor: '#000',
+  expiresAt: '2027-02-22T00:00:00.000Z',
+  disabledAt: null,
+  partnerParams: { order_id: 'ORD-1' },
+  userId: 'user-123',
+  tokenProvidedFields: ['consent', 'country'],
+  tokenProvidedValues: {
+    country: 'NG',
+    consent: { granted: true, grantedAt: '2026-01-01T09:00:00.000Z' },
+  },
+  createdAt: '2026-11-24T10:00:00.000Z',
+  updatedAt: '2026-11-24T10:00:00.000Z',
+};
+
+test('smileLinks.create: golden request and parsed acknowledgment', async () => {
+  const { fetch, requests } = routerFetch(() =>
+    jsonResponse(201, {
+      link: `https://links.usesmileid.com/v3/2/${LINK_ID}`,
+      message: 'Smile Link created',
+      ref_id: LINK_ID,
+      user_id: 'user-123',
+    }),
+  );
+  const client = new SmileID({
+    partnerId: '1234',
+    apiKey: 'k',
+    fetch,
+    defaultCallbackUrl: 'https://example.com/default',
+  });
+
+  const created = await client.smileLinks.create({
+    idTypes: linkIdTypes,
+    name: 'Onboarding',
+    companyName: 'Acme Pay',
+    noticePrivacyPolicyUrl: 'https://partner.example/privacy',
+    isSingleUse: true,
+    description: 'For Ada',
+    expiresAt: '2027-02-22T00:00:00.000Z',
+    logoUrl: 'https://partner.example/logo.png',
+    redirectUrl: 'https://partner.example/done',
+    themeColor: '#000',
+    partnerParams: { order_id: 'ORD-1' },
+    userId: 'user-123',
+  });
+
+  assert.deepEqual(created, {
+    link: `https://links.usesmileid.com/v3/2/${LINK_ID}`,
+    message: 'Smile Link created',
+    refId: LINK_ID,
+    userId: 'user-123',
+  });
+
+  const req = opRequest(requests);
+  assert.equal(req.method, 'POST');
+  assert.match(req.url, /\/v3\/smile_links$/);
+  assert.equal(req.headers['User-ID'], undefined);
+  assert.equal(req.headers['SmileID-Partner-ID'], undefined);
+  assert.ok(req.headers['SmileID-Token'], 'token attached');
+  const m = multipartHelpers(req);
+  assert.equal(
+    req.bodyText,
+    m.json('id_types', linkIdTypesWire) +
+      m.text('name', 'Onboarding') +
+      m.text('company_name', 'Acme Pay') +
+      m.text('notice_privacy_policy_url', 'https://partner.example/privacy') +
+      m.text('is_single_use', 'true') +
+      m.text('callback_url', 'https://example.com/default') +
+      m.text('description', 'For Ada') +
+      m.text('expires_at', '2027-02-22T00:00:00.000Z') +
+      m.text('logo_url', 'https://partner.example/logo.png') +
+      m.text('redirect_url', 'https://partner.example/done') +
+      m.text('theme_color', '#000') +
+      m.json('partner_params', '{"order_id":"ORD-1"}') +
+      m.text('user_id', 'user-123') +
+      m.end,
+  );
+});
+
+test('smileLinks.create: only the required fields, a null user id on a reusable link', async () => {
+  const { fetch, requests } = routerFetch(() =>
+    jsonResponse(201, { link: 'https://l', message: 'Smile Link created', ref_id: LINK_ID, user_id: null }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  const created = await client.smileLinks.create({
+    idTypes: linkIdTypes,
+    name: 'Onboarding',
+    noticePrivacyPolicyUrl: 'https://partner.example/privacy',
+    isSingleUse: false,
+  });
+  assert.equal(created.userId, null);
+  const req = opRequest(requests);
+  const m = multipartHelpers(req);
+  assert.equal(
+    req.bodyText,
+    m.json('id_types', linkIdTypesWire) +
+      m.text('name', 'Onboarding') +
+      m.text('notice_privacy_policy_url', 'https://partner.example/privacy') +
+      m.text('is_single_use', 'false') +
+      m.end,
+  );
+});
+
+test('smileLinks.create: is not retried after a 500, and rejects an http callback URL', async () => {
+  const { fetch, requests } = routerFetch(() => jsonResponse(500, { status: 'error', message: 'x' }));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch, maxRetries: 2 });
+  const params = {
+    idTypes: linkIdTypes,
+    name: 'Onboarding',
+    noticePrivacyPolicyUrl: 'https://partner.example/privacy',
+    isSingleUse: false,
+  };
+  await assert.rejects(client.smileLinks.create(params), APIError);
+  assert.equal(requests.filter((r) => !r.url.endsWith('/v3/token')).length, 1);
+  await assert.rejects(client.smileLinks.create({ ...params, callbackUrl: 'http://example.com' }));
+});
+
+test('smileLinks.retrieve: GET by ref id, parses the link resource', async () => {
+  const { fetch, requests } = routerFetch(() => jsonResponse(200, linkResourceBody));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const link = await client.smileLinks.retrieve(LINK_ID);
+
+  assert.deepEqual(link, linkResource);
+  const req = opRequest(requests);
+  assert.equal(req.method, 'GET');
+  assert.match(req.url, new RegExp(`/v3/smile_links/${LINK_ID}$`));
+  assert.equal(req.bodyText, '');
+  assert.ok(req.headers['SmileID-Token'], 'token attached');
+});
+
+test('smileLinks.retrieve: a link without partner params has no partnerParams field', async () => {
+  const { fetch } = routerFetch(() => jsonResponse(200, { ref_id: LINK_ID, link: 'https://l', name: 'n' }));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  assert.deepEqual(await client.smileLinks.retrieve(LINK_ID), {
+    refId: LINK_ID,
+    link: 'https://l',
+    name: 'n',
+  });
+});
+
+test('smileLinks.retrieve: a 404 raises NotFoundError', async () => {
+  const { fetch } = routerFetch(() => jsonResponse(404, { status: 'Not Found', message: 'No link' }));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  await assert.rejects(client.smileLinks.retrieve(LINK_ID), NotFoundError);
+});
+
+test('smileLinks.list: sends the query and parses the page with job stats', async () => {
+  const stats = { clear: 3, block: 1, attention: 1, error: 0, successful_jobs: 4, failed_jobs: 1, total_jobs: 5 };
+  const { fetch, requests } = routerFetch(() =>
+    jsonResponse(200, {
+      links: [{ ...linkResourceBody, ...stats }],
+      meta: { current_page: 2, limit: 10, total_count: 42, total_pages: 5 },
+    }),
+  );
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const page = await client.smileLinks.list({ limit: 10, page: 2, singleUse: false });
+
+  assert.deepEqual(page, {
+    links: [
+      {
+        ...linkResource,
+        clear: 3,
+        block: 1,
+        attention: 1,
+        error: 0,
+        successfulJobs: 4,
+        failedJobs: 1,
+        totalJobs: 5,
+      },
+    ],
+    meta: { currentPage: 2, limit: 10, totalCount: 42, totalPages: 5 },
+  });
+  const req = opRequest(requests);
+  assert.equal(req.method, 'GET');
+  const url = new URL(req.url);
+  assert.equal(url.pathname, '/v3/smile_links');
+  assert.equal(url.searchParams.get('limit'), '10');
+  assert.equal(url.searchParams.get('page'), '2');
+  assert.equal(url.searchParams.get('single_use'), 'false');
+});
+
+test('smileLinks.list: with no params sends no query; a body without links gives an empty page', async () => {
+  const { fetch, requests } = routerFetch(() => jsonResponse(200, {}));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+  const page = await client.smileLinks.list();
+  assert.deepEqual(page, { meta: undefined, links: [] });
+  assert.equal(new URL(opRequest(requests).url).search, '');
+});
+
+test('smileLinks.update: golden PUT with id_types and is_disabled', async () => {
+  const { fetch, requests } = routerFetch(() => jsonResponse(200, linkResourceBody));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  const link = await client.smileLinks.update(LINK_ID, { idTypes: linkIdTypes, isDisabled: false });
+
+  assert.deepEqual(link, linkResource);
+  const req = opRequest(requests);
+  assert.equal(req.method, 'PUT');
+  assert.match(req.url, new RegExp(`/v3/smile_links/${LINK_ID}$`));
+  assert.ok(req.headers['SmileID-Token'], 'token attached');
+  const m = multipartHelpers(req);
+  assert.equal(
+    req.bodyText,
+    m.json('id_types', linkIdTypesWire) + m.text('is_disabled', 'false') + m.end,
+  );
+});
+
+test('smileLinks.update: either field may be sent alone', async () => {
+  const { fetch, requests } = routerFetch(() => jsonResponse(200, linkResourceBody));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch });
+
+  await client.smileLinks.update(LINK_ID, { isDisabled: true });
+  await client.smileLinks.update(LINK_ID, { idTypes: linkIdTypes });
+
+  const [first, second] = requests.filter((r) => !r.url.endsWith('/v3/token'));
+  const m1 = multipartHelpers(first);
+  assert.equal(first.bodyText, m1.text('is_disabled', 'true') + m1.end);
+  const m2 = multipartHelpers(second);
+  assert.equal(second.bodyText, m2.json('id_types', linkIdTypesWire) + m2.end);
+});
+
+test('smileLinks.update: needs idTypes or isDisabled, and is not retried', async () => {
+  const { fetch, requests } = routerFetch(() => jsonResponse(500, { status: 'error', message: 'x' }));
+  const client = new SmileID({ partnerId: '1234', apiKey: 'k', fetch, maxRetries: 2 });
+  assert.throws(() => client.smileLinks.update(LINK_ID, {}), ValidationError);
+  assert.equal(requests.length, 0);
+  await assert.rejects(client.smileLinks.update(LINK_ID, { isDisabled: true }), APIError);
+  assert.equal(requests.filter((r) => !r.url.endsWith('/v3/token')).length, 1);
 });

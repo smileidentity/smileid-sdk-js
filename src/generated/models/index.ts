@@ -191,6 +191,18 @@ export interface BasicKycResult {
    * still compile; the SDK always sets it.
    */
   jobId?: string | null;
+  /**
+   * From the response's `User-ID` header, or the body's `user_id` when the header is absent.
+   * Null when neither is present. Optional so older typed objects still compile; the SDK always sets it.
+   */
+  userId?: string | null;
+  /**
+   * The `Response-Signature` header, or null when absent. It is computed the same way as a
+   * webhook signature, so your webhook verification code can check it. The SDK does not.
+   */
+  responseSignature?: string | null;
+  /** The `Response-Timestamp` header the signature was computed against, or null when absent. */
+  responseTimestamp?: string | null;
 }
 
 /** documents.verify (spec §6.2). */
@@ -414,6 +426,152 @@ export interface IdStatusParams {
   idType: string;
 }
 
+/** phone.verify → POST /v3/phone. Checks who a mobile number is registered to. */
+export interface PhoneVerificationParams extends EntryParamsBase {
+  /** ISO 3166-1 alpha-2 code of the country the number belongs to. */
+  country: string;
+  /** The number to verify, in E.164 format. It is not `userDetails.phoneNumber`. */
+  phoneNumber: string;
+  /** Mobile network operator: `MTN`, `VODAFONE` or `AIRTELTIGO`. Required for Ghana. */
+  operator?: 'MTN' | 'VODAFONE' | 'AIRTELTIGO';
+  /** National ID number to match against the registration. Required for Kenya. */
+  idNumber?: string;
+  /** Your own user id, sent as a body field. The API mints one when you omit it. */
+  userId?: string;
+}
+
+/**
+ * address.verify → POST /v3/address. Send `idNumber` (required for South Africa) or
+ * `utilityNumber` with `utilityProvider` and `utilityType` (required for Nigeria).
+ */
+export interface AddressVerificationParams extends EntryParamsBase {
+  /** The address to verify, as the user gave it to you. */
+  address: string;
+  /** `NG` or `ZA`. */
+  country: 'NG' | 'ZA';
+  /** The national ID number the address is registered against. */
+  idNumber?: string;
+  /** The utility meter or account number the address is registered against. */
+  utilityNumber?: string;
+  /** Code of the Nigerian utility provider. */
+  utilityProvider?: string;
+  /** Whether the Nigerian utility account is prepaid or postpaid. */
+  utilityType?: 'PrePaid' | 'PostPaid';
+  /** Your own user id, sent as a body field. The API mints one when you omit it. */
+  userId?: string;
+}
+
+/** One verification a Smile Link offers. */
+export interface SmileLinkIdType {
+  /** ISO 3166-1 alpha-2 country code. */
+  country: string;
+  idType: string;
+  /**
+   * `biometric_kyc`, `document_verification`, `enhanced_document_verification` or
+   * `enhanced_kyc`. A link read back names Document Verification `doc_verification`.
+   */
+  verificationMethod: string;
+}
+
+/** smileLinks.create → POST /v3/smile_links. */
+export interface CreateSmileLinkParams {
+  /** At least one. */
+  idTypes: SmileLinkIdType[];
+  name: string;
+  /** Must be a public HTTPS URL. */
+  noticePrivacyPolicyUrl: string;
+  isSingleUse: boolean;
+  /** Omit it to show the company's own name. It cannot be changed after the link is created. */
+  companyName?: string;
+  /** A public HTTPS URL. Defaults to the client's `defaultCallbackUrl`, or else the partner's configured callback. */
+  callbackUrl?: string;
+  description?: string;
+  /** ISO 8601 timestamp. Defaults to 90 days from creation for single-use links. */
+  expiresAt?: string;
+  logoUrl?: string;
+  redirectUrl?: string;
+  themeColor?: string;
+  partnerParams?: PartnerParams;
+  /** The user id for a single-use link's job. */
+  userId?: string;
+}
+
+/** The acknowledgment smileLinks.create returns. */
+export interface SmileLinkCreated {
+  /** The URL to hand to the end user. */
+  link: string;
+  message: string;
+  /** The link's id, used by the other `smileLinks` methods. */
+  refId: string;
+  /** Null on multi-use links. */
+  userId: string | null;
+}
+
+/** A Smile Link resource. `partnerParams` keeps the keys you sent. */
+export interface SmileLink {
+  refId: string;
+  link: string;
+  name: string;
+  companyName?: string;
+  description?: string | null;
+  idTypes?: SmileLinkIdType[];
+  isSingleUse?: boolean;
+  callbackUrl?: string;
+  noticePrivacyPolicyUrl?: string;
+  logoUrl?: string;
+  redirectUrl?: string | null;
+  themeColor?: string;
+  expiresAt?: string | null;
+  /** Set while the link is disabled; null when active. */
+  disabledAt?: string | null;
+  partnerParams?: Record<string, unknown> | null;
+  userId?: string | null;
+  tokenProvidedFields?: string[];
+  tokenProvidedValues?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+  /** Any other field the API adds, camelCased. */
+  [field: string]: unknown;
+}
+
+/** Outcome counts for the jobs run against a link. */
+export interface SmileLinkJobStats {
+  clear: number;
+  block: number;
+  attention: number;
+  error: number;
+  successfulJobs: number;
+  failedJobs: number;
+  totalJobs: number;
+}
+
+/** An entry in a smileLinks.list page: the link and its job stats. */
+export type SmileLinkListItem = SmileLink & SmileLinkJobStats;
+
+/** smileLinks.list query. */
+export interface ListSmileLinksParams {
+  /** Page size, 1 to 100. The API default is 20. */
+  limit?: number;
+  /** Page number, from 1. The API default is 1. */
+  page?: number;
+  /** `true` for single-use links only, `false` for reusable links only. Omit for both. */
+  singleUse?: boolean;
+}
+
+/** One page of smileLinks.list. */
+export interface SmileLinkListResponse {
+  links: SmileLinkListItem[];
+  meta: { currentPage: number; limit: number; totalCount: number; totalPages: number };
+}
+
+/** smileLinks.update body. Send at least one field. */
+export interface UpdateSmileLinkParams {
+  /** Replaces the link's `idTypes`. 1 to 50 entries. */
+  idTypes?: SmileLinkIdType[];
+  /** `true` disables the link, `false` re-enables it. */
+  isDisabled?: boolean;
+}
+
 /** Options for verifications.waitUntilComplete (spec §6.9). */
 export interface WaitOptions {
   /** Poll interval in milliseconds. Default 2000. */
@@ -591,4 +749,16 @@ export interface OneTimeAmlResult {
    * still compile; the SDK always sets it.
    */
   jobId?: string | null;
+  /**
+   * From the response's `User-ID` header, or the body's `user_id` when the header is absent.
+   * Null when neither is present. Optional so older typed objects still compile; the SDK always sets it.
+   */
+  userId?: string | null;
+  /**
+   * The `Response-Signature` header, or null when absent. It is computed the same way as a
+   * webhook signature, so your webhook verification code can check it. The SDK does not.
+   */
+  responseSignature?: string | null;
+  /** The `Response-Timestamp` header the signature was computed against, or null when absent. */
+  responseTimestamp?: string | null;
 }
