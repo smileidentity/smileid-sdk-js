@@ -2,10 +2,17 @@
 #
 # Bump the SDK version and cut the changelog's Unreleased section.
 #
-# Usage: scripts/bump-version.sh <major|minor|patch>
+# Usage: scripts/bump-version.sh <major|minor|patch|X.Y.Z>
+#
+# A part bumps that component of the current version. An exact X.Y.Z (plain
+# digits, no pre-release or build suffix) sets that version; it must be
+# greater than the current one. The release train uses it so every SDK lands
+# on the shared version even when one skipped a release.
 #
 # Run from the repository root. Updates:
 #   - package.json and package-lock.json ("version")
+#   - example/package-lock.json: the version of the local SDK package entry
+#     (the example depends on the SDK via "file:..")
 #   - src/version.ts (VERSION)
 #   - CHANGELOG.md: moves the Unreleased entries under a new
 #     "## [x.y.z] - YYYY-MM-DD" heading, leaves an empty Unreleased section,
@@ -23,13 +30,19 @@ die() {
   exit 1
 }
 
+usage="usage: scripts/bump-version.sh <major|minor|patch|X.Y.Z>"
+semver_re='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
 part="${1:-}"
 case "$part" in
   major | minor | patch) ;;
-  *) die "usage: scripts/bump-version.sh <major|minor|patch>" ;;
+  [0-9]*)
+    [[ "$part" =~ $semver_re ]] ||
+      die "'$part' is not a plain X.Y.Z version (digits only, no leading zeros or suffix); $usage"
+    ;;
+  *) die "$usage" ;;
 esac
 
-for f in package.json package-lock.json src/version.ts CHANGELOG.md; do
+for f in package.json package-lock.json example/package-lock.json src/version.ts CHANGELOG.md; do
   [ -f "$f" ] || die "$f not found (run from the repository root)"
 done
 
@@ -44,6 +57,15 @@ case "$part" in
   major) next="$((major + 1)).0.0" ;;
   minor) next="${major}.$((minor + 1)).0" ;;
   patch) next="${major}.${minor}.$((patch + 1))" ;;
+  *)
+    [[ "$part" =~ $semver_re ]]
+    if ((BASH_REMATCH[1] < major ||
+      (BASH_REMATCH[1] == major && BASH_REMATCH[2] < minor) ||
+      (BASH_REMATCH[1] == major && BASH_REMATCH[2] == minor && BASH_REMATCH[3] <= patch))); then
+      die "version $part is not greater than the current version $current"
+    fi
+    next="$part"
+    ;;
 esac
 
 today="${BUMP_DATE:-$(date -u +%Y-%m-%d)}"
@@ -57,6 +79,22 @@ grep -qxF "export const VERSION = '${current}';" src/version.ts ||
 lock_version="$(node -p "require('./package-lock.json').version")"
 [ "$lock_version" = "$current" ] ||
   die "package-lock.json version '$lock_version' does not match package.json '$current'"
+
+sdk_name="$(node -p "require('./package.json').name")"
+# The local SDK entries in the example lockfile ("..", from "file:..") must be
+# at the current version: prints their count, or "stale <key@version, ...>".
+example_entries="$(SDK_NAME="$sdk_name" CURRENT="$current" node -p '
+  const lock = JSON.parse(require("fs").readFileSync("example/package-lock.json", "utf8"));
+  const entries = Object.entries(lock.packages || {}).filter(
+    ([key, p]) => !key.startsWith("node_modules/") && p.name === process.env.SDK_NAME,
+  );
+  const stale = entries.filter(([, p]) => p.version !== process.env.CURRENT);
+  stale.length ? "stale " + stale.map(([k, p]) => k + "@" + p.version).join(", ") : entries.length;
+')"
+case "$example_entries" in
+  stale*) die "example/package-lock.json SDK entry does not match package.json '$current': ${example_entries#stale }" ;;
+  0) die "example/package-lock.json has no entry for the local SDK package '$sdk_name'" ;;
+esac
 
 [ "$(grep -cxF '## [Unreleased]' CHANGELOG.md)" = "1" ] ||
   die "CHANGELOG.md must have exactly one '## [Unreleased]' heading"
@@ -102,7 +140,7 @@ awk -v next_ver="$next" -v today="$today" -v repo="$repo_url" -v cur="$current" 
   { print }
 ' CHANGELOG.md >"$tmp/CHANGELOG.md"
 
-NEXT_VERSION="$next" OUT="$tmp" node -e '
+NEXT_VERSION="$next" OUT="$tmp" SDK_NAME="$sdk_name" node -e '
   const fs = require("fs");
   const path = require("path");
   const next = process.env.NEXT_VERSION;
@@ -114,6 +152,14 @@ NEXT_VERSION="$next" OUT="$tmp" node -e '
   lock.version = next;
   if (lock.packages && lock.packages[""]) lock.packages[""].version = next;
   fs.writeFileSync(path.join(out, "package-lock.json"), JSON.stringify(lock, null, 2) + "\n");
+  // The example installs the SDK from "file:..", so its lockfile records the
+  // SDK version under the local package entry (key ".."). Update only that
+  // entry, not registry packages.
+  const ex = JSON.parse(fs.readFileSync("example/package-lock.json", "utf8"));
+  for (const [key, p] of Object.entries(ex.packages || {})) {
+    if (!key.startsWith("node_modules/") && p.name === process.env.SDK_NAME) p.version = next;
+  }
+  fs.writeFileSync(path.join(out, "example-package-lock.json"), JSON.stringify(ex, null, 2) + "\n");
 '
 
 sed "s/^export const VERSION = '${current//./\\.}';\$/export const VERSION = '${next}';/" src/version.ts >"$tmp/version.ts"
@@ -122,6 +168,7 @@ grep -qxF "export const VERSION = '${next}';" "$tmp/version.ts" || die "could no
 # cp (not mv) keeps each file's existing permissions.
 cp "$tmp/package.json" package.json
 cp "$tmp/package-lock.json" package-lock.json
+cp "$tmp/example-package-lock.json" example/package-lock.json
 cp "$tmp/version.ts" src/version.ts
 cp "$tmp/CHANGELOG.md" CHANGELOG.md
 
